@@ -31,6 +31,9 @@ const ManageRegistrationPage = lazy(() =>
 const SchedulePage = lazy(() =>
   import("./pages/SchedulePage").then((module) => ({ default: module.SchedulePage })),
 )
+const NavigationPage = lazy(() =>
+  import("./pages/NavigationPage").then((module) => ({ default: module.NavigationPage })),
+)
 const ExamPage = lazy(() =>
   import("./pages/ExamPage").then((module) => ({ default: module.ExamPage })),
 )
@@ -106,6 +109,7 @@ export function App() {
               element={<ManageRegistrationPage key="withdraw" action="withdraw" />}
             />
             <Route path="/schedule" element={<SchedulePage />} />
+            <Route path="/navigation" element={<NavigationPage />} />
             <Route path="/exams" element={<ExamPage />} />
             <Route path="/buildings" element={<BuildingsPage />} />
             <Route path="/faculties" element={<FacultiesPage />} />

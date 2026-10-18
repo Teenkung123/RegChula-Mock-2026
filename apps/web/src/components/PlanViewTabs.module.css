@@ -1,9 +1,9 @@
 /* Hallmark · component: plan-view-tabs · genre: modern-minimal · design-system: design.md */
 .tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 0;
-  max-width: 30rem;
+  max-width: 42rem;
   margin-inline-start: auto;
   overflow: clip;
   border: var(--rule-thin) solid var(--color-rule-2);

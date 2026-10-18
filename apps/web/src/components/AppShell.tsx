@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CN, GB, TH } from "country-flag-icons/react/3x2"
 import {
   Building2,
+  Route,
   CalendarDays,
   Check,
   CircleMinus,
@@ -80,6 +81,11 @@ const routeGroups: Array<{ labelKey: string; items: RouteItem[] }> = [
         to: "/schedule",
         labelKey: "nav.schedule",
         icon: <CalendarDays aria-hidden="true" size={17} />,
+      },
+      {
+        to: "/navigation",
+        labelKey: "nav.navigation",
+        icon: <Route aria-hidden="true" size={17} />,
       },
       { to: "/exams", labelKey: "nav.exams", icon: <Clock3 aria-hidden="true" size={17} /> },
       {

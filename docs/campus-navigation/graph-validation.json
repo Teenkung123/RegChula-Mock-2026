@@ -1,0 +1,13 @@
+{
+  "passed": [
+    "Every edge is consecutive original OSM node pair",
+    "No ground edge intersects buffered building interior except mapped building_passage",
+    "Way/node access restrictions applied with permit/destination/use_sidepath/conditional regression tests",
+    "No geometric intersection connections invented"
+  ],
+  "nodes": 5469,
+  "edges": 6012,
+  "exampleDistanceM": 192.2,
+  "exampleStepsEdges": 1,
+  "exampleSharedRoadEdges": 2
+}
