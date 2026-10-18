@@ -1,0 +1,137 @@
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4
+   Modern-minimal academic workspace; neutral ruled disclosures with semantic conflict bars.
+   Exact time text accompanies the bars. Verified at 320, 375, 414, 768 and 1280px. */
+.root {
+  min-width: 0;
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.root p {
+  margin: 0;
+}
+.notice {
+  padding-block: var(--space-xs);
+  color: var(--color-ink-2);
+  font-size: var(--text-xs);
+}
+.group {
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.toggle {
+  display: flex;
+  width: 100%;
+  height: auto;
+  min-height: var(--space-xl);
+  justify-content: flex-start;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+  white-space: normal;
+  text-align: start;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+
+.toggle:hover,
+.toggle[data-hovered="true"] {
+  background: var(--color-paper-2);
+}
+.toggle:focus-visible,
+.links a:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.toggle svg {
+  width: var(--space-md);
+  height: var(--space-md);
+  flex-shrink: 0;
+}
+.categoryIcon {
+  color: var(--color-warning);
+}
+.group[data-neutral="true"] .categoryIcon {
+  color: var(--color-ink-2);
+}
+.group[data-conflict="true"] .categoryIcon,
+.conflictText {
+  color: var(--color-error);
+}
+.label {
+  flex: 1;
+  min-width: 0;
+}
+.count {
+  font-variant-numeric: tabular-nums;
+}
+.details {
+  padding: var(--space-xs) var(--space-xs) var(--space-sm);
+}
+.sourceLabel {
+  font-weight: 700;
+}
+.source {
+  white-space: pre-wrap;
+}
+.comparison {
+  border-inline-start: 2px solid var(--color-error);
+  padding-inline-start: var(--space-xs);
+  font-variant-numeric: tabular-nums;
+}
+.details > * + *,
+.comparison + .comparison {
+  margin-top: var(--space-xs);
+}
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-sm);
+}
+.links a {
+  max-width: 100%;
+  color: var(--color-ink);
+  text-decoration: underline;
+  text-underline-offset: var(--space-3xs);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.bars {
+  margin-block: var(--space-xs);
+}
+.track {
+  position: relative;
+  height: var(--space-xs);
+  background: var(--color-paper-2);
+}
+.track + .track {
+  margin-top: var(--space-2xs);
+}
+.bar,
+.overlap {
+  position: absolute;
+  left: var(--bar-start);
+  width: var(--bar-width);
+  height: 100%;
+}
+.bar {
+  background: var(--color-neutral);
+}
+.overlap {
+  background: var(--color-error);
+}
+.axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-ink-2);
+  font-size: var(--text-xs);
+}

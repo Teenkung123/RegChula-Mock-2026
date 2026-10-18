@@ -1,0 +1,136 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 · component scope; existing RegChula tokens */
+.card {
+  container-type: inline-size;
+  min-width: 0;
+  overflow: clip;
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-whisper);
+}
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+  padding: var(--space-md);
+  border-block-end: var(--rule-thin) solid var(--color-rule);
+  border-inline-start: 0.2rem solid var(--color-accent);
+  background: var(--color-paper-2);
+}
+.identity {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+.identity h4 {
+  margin: 0;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+}
+.identity p {
+  margin: var(--space-2xs) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.availability {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2xs);
+}
+.availability > span {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.meter {
+  width: 100%;
+  min-width: 7rem;
+}
+.meter [data-slot="progress-bar-track"] {
+  height: 0.3rem;
+}
+.meetings {
+  display: grid;
+}
+.meeting {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs) var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+}
+.meeting + .meeting {
+  border-block-start: var(--rule-thin) solid var(--color-rule-2);
+}
+.meeting:nth-child(even) {
+  background: var(--color-paper);
+}
+.when {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: start;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+.when > div {
+  display: grid;
+  gap: var(--space-2xs);
+}
+.when strong {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+.when strong span {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.type {
+  justify-self: start;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.025em;
+}
+.detail {
+  display: flex;
+  align-items: start;
+  gap: var(--space-xs);
+  min-width: 0;
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+}
+.detail > span {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.detail small {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+.when > svg,
+.detail > svg {
+  flex: 0 0 auto;
+  margin-block-start: 0.2rem;
+  color: var(--color-muted);
+}
+.empty {
+  margin: 0;
+  padding: var(--space-md);
+  color: var(--color-muted);
+}
+@container (min-width: 36rem) {
+  .meeting {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+  .when {
+    grid-column: auto;
+  }
+  .availability {
+    justify-items: end;
+  }
+}

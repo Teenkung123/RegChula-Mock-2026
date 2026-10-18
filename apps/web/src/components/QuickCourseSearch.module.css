@@ -1,0 +1,119 @@
+/* Hallmark · component: quick-course-search · genre: modern-minimal · design-system: design.md */
+.content {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-sm);
+}
+.control[data-slot="combo-box-input-group"] {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: nowrap;
+  padding-inline: var(--space-sm);
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-sm);
+  background: var(--color-secondary-control);
+  color: var(--color-ink);
+}
+.control > svg {
+  flex: 0 0 auto;
+}
+.control .input {
+  min-width: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  outline: none;
+}
+.control:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+.trigger {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  width: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+}
+.trigger > svg {
+  flex: 0 0 auto;
+}
+.suggestions {
+  z-index: var(--z-modal);
+  width: var(--trigger-width);
+  max-width: calc(100vw - 2rem);
+  max-height: min(22rem, 50dvh);
+  overflow-y: auto;
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-float);
+}
+.option {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  cursor: pointer;
+}
+.option[data-focused="true"],
+.option[data-hovered="true"] {
+  background: var(--color-paper-2);
+}
+.code {
+  flex: 0 0 auto;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-accent-text);
+}
+.names {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3xs);
+}
+.names strong,
+.names small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.names strong {
+  font-size: var(--text-sm);
+}
+.names small {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+.actions {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+  justify-content: space-between;
+}
+.actions > button {
+  padding-inline: var(--space-xs);
+}
+.suggestions .actions {
+  padding: var(--space-sm);
+  border-top: var(--rule-thin) solid var(--color-rule);
+}
+.error {
+  margin: 0;
+  color: var(--color-error);
+  font-size: var(--text-xs);
+}

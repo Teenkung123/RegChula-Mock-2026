@@ -1,0 +1,17 @@
+NAME                                READY   STATUS      RESTARTS   AGE     IP           NODE              NOMINATED NODE   READINESS GATES
+pod/regchula-api-8469f4dc-b4sx5     1/1     Running     0          2m10s   10.244.1.4   desktop-worker    <none>           <none>
+pod/regchula-api-8469f4dc-gpfm7     1/1     Running     0          2m10s   10.244.3.3   desktop-worker2   <none>           <none>
+pod/regchula-api-8469f4dc-l5cz2     1/1     Running     0          2m10s   10.244.2.6   desktop-worker3   <none>           <none>
+pod/regchula-bootstrap-tp7gk        0/1     Completed   0          2m13s   10.244.2.5   desktop-worker3   <none>           <none>
+pod/regchula-mysql-0                1/1     Running     0          5m56s   10.244.1.3   desktop-worker    <none>           <none>
+pod/regchula-redis-0                1/1     Running     0          5m55s   10.244.2.3   desktop-worker3   <none>           <none>
+pod/regchula-web-5b8cdf8c87-8z2mr   1/1     Running     0          2m9s    10.244.2.7   desktop-worker3   <none>           <none>
+pod/regchula-web-5b8cdf8c87-h92rs   1/1     Running     0          2m9s    10.244.3.4   desktop-worker2   <none>           <none>
+
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES               SELECTOR
+deployment.apps/regchula-api   3/3     3            3           2m10s   api          regchula-api:local   app.kubernetes.io/name=regchula-api
+deployment.apps/regchula-web   2/2     2            2           2m9s    web          regchula-web:local   app.kubernetes.io/name=regchula-web
+
+NAME                              READY   AGE     CONTAINERS   IMAGES
+statefulset.apps/regchula-mysql   1/1     5m56s   mysql        mysql:8.4
+statefulset.apps/regchula-redis   1/1     5m56s   redis        redis:7.4-alpine

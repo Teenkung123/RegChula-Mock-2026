@@ -1,0 +1,305 @@
+config:
+  target: "http://127.0.0.1:3000"
+  http:
+    timeout: 10
+  phases:
+    - name: global-warm-up
+      duration: 20
+      arrivalRate: 1
+      rampTo: 5
+      maxVusers: 100
+    - name: global-mixed
+      duration: 60
+      arrivalRate: 5
+      rampTo: 10
+      maxVusers: 200
+  defaults:
+    headers:
+      origin: "http://localhost:5173"
+  plugins:
+    ensure: {}
+    metrics-by-endpoint:
+      groupDynamicURLs: true
+  ensure:
+    maxErrorRate: 1
+    thresholds:
+      - "http.response_time.p95": 3000
+    conditions:
+      - expression: "vusers.created == vusers.completed"
+      - expression: "http.codes.200 == http.responses"
+
+scenarios:
+  - name: complete-student-lifecycle
+    weight: 75
+    flow:
+      - get:
+          name: auth-challenge
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          name: auth-login
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "bench-global-{{ $randomString() }}"
+            password: "benchmark-only"
+            rememberMe: false
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          name: current-user
+          url: "/api/v1/me"
+      - get:
+          name: terms
+          url: "/api/v1/terms"
+      - get:
+          name: announcements
+          url: "/api/v1/announcements"
+      - get:
+          name: catalog-options
+          url: "/api/v1/catalog/options"
+      - get:
+          name: autocomplete
+          url: "/api/v1/courses?page=1&pageSize=8&mode=autocomplete&q=99"
+      - get:
+          name: catalog-code-search
+          url: "/api/v1/courses?page=1&pageSize=20&q=99999"
+      - get:
+          name: catalog-thai-search
+          url: "/api/v1/courses?page=1&pageSize=20&q=การ"
+      - get:
+          name: catalog-advanced-search
+          url: "/api/v1/courses?page=1&pageSize=20&days=MO,WE&startTime=09:00&endTime=16:00&credits=3"
+      - get:
+          name: course-detail-1
+          url: "/api/v1/courses/9999901"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: section1
+      - get:
+          name: course-detail-2
+          url: "/api/v1/courses/9999902"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: section2
+      - get:
+          name: course-detail-3
+          url: "/api/v1/courses/9999903"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: section3
+      - get:
+          name: course-detail-4
+          url: "/api/v1/courses/9999904"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: section4
+      - get:
+          name: course-reviews
+          url: "/api/v1/courses/9999901/reviews?page=1&pageSize=10"
+      - get:
+          name: preferences-read
+          url: "/api/v1/preferences"
+      - patch:
+          name: preferences-update
+          url: "/api/v1/preferences"
+          json:
+            theme: "dark"
+            accentPreset: "teal"
+            uiScale: 1.05
+      - post:
+          name: preferences-reset
+          url: "/api/v1/preferences/reset"
+      - get:
+          name: registrations-empty
+          url: "/api/v1/registrations"
+      - post:
+          name: registration-batch-preview
+          url: "/api/v1/registrations/batch-preview"
+          json:
+            choices:
+              - sectionId: "{{ section1 }}"
+              - sectionId: "{{ section2 }}"
+              - sectionId: "{{ section3 }}"
+            allowAdvisoryOverride: true
+          capture:
+            - json: "$.data.confirmationToken"
+              as: batchRegistrationToken
+      - post:
+          name: registration-batch-commit
+          url: "/api/v1/registrations/batch"
+          headers:
+            idempotency-key: "batch-{{ $randomString() }}"
+          json:
+            confirmationToken: "{{ batchRegistrationToken }}"
+      - post:
+          name: registration-single-preview
+          url: "/api/v1/registrations/preview"
+          json:
+            sectionId: "{{ section4 }}"
+            allowAdvisoryOverride: true
+          capture:
+            - json: "$.data.confirmationToken"
+              as: singleRegistrationToken
+      - post:
+          name: registration-single-commit
+          url: "/api/v1/registrations"
+          headers:
+            idempotency-key: "single-{{ $randomString() }}"
+          json:
+            confirmationToken: "{{ singleRegistrationToken }}"
+      - get:
+          name: registrations-active
+          url: "/api/v1/registrations"
+          capture:
+            - json: "$.data.registrations[0].registrationId"
+              as: registration1
+            - json: "$.data.registrations[1].registrationId"
+              as: registration2
+            - json: "$.data.registrations[2].registrationId"
+              as: registration3
+            - json: "$.data.registrations[3].registrationId"
+              as: registration4
+      - get:
+          name: weekly-schedule
+          url: "/api/v1/schedule"
+      - get:
+          name: exam-schedule
+          url: "/api/v1/exams"
+      - get:
+          name: schedule-colors-read
+          url: "/api/v1/schedule/colors"
+      - put:
+          name: schedule-color-update
+          url: "/api/v1/schedule/colors/9999901"
+          json:
+            colorId: "teal"
+      - delete:
+          name: schedule-color-reset
+          url: "/api/v1/schedule/colors/9999901"
+      - post:
+          name: withdrawal-preview
+          url: "/api/v1/withdrawals/preview"
+          json:
+            selections:
+              - registrationId: "{{ registration1 }}"
+                reason: "Global benchmark lifecycle"
+          capture:
+            - json: "$.data.confirmationToken"
+              as: withdrawalToken
+      - post:
+          name: withdrawal-pdf-create
+          url: "/api/v1/withdrawals/form"
+          json:
+            confirmationToken: "{{ withdrawalToken }}"
+      - post:
+          name: drop-preview
+          url: "/api/v1/registrations/drop-preview"
+          json:
+            registrationIds:
+              - "{{ registration1 }}"
+              - "{{ registration2 }}"
+              - "{{ registration3 }}"
+              - "{{ registration4 }}"
+          capture:
+            - json: "$.data.confirmationToken"
+              as: dropToken
+      - post:
+          name: drop-commit
+          url: "/api/v1/registrations/drop"
+          headers:
+            idempotency-key: "drop-{{ $randomString() }}"
+          json:
+            confirmationToken: "{{ dropToken }}"
+      - post:
+          name: auth-logout
+          url: "/api/v1/auth/logout"
+
+  - name: saved-withdrawal-pdf
+    weight: 10
+    flow:
+      - get:
+          name: pdf-auth-challenge
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          name: pdf-auth-login
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "bench-global-pdf"
+            password: "benchmark-only"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          name: withdrawal-pdf-read
+          url: "/api/v1/withdrawals/00000000-0000-4000-8000-000000000901/pdf"
+      - get:
+          name: withdrawal-pdf-download
+          url: "/api/v1/withdrawals/00000000-0000-4000-8000-000000000901/pdf?download=1"
+      - post:
+          name: pdf-auth-logout
+          url: "/api/v1/auth/logout"
+
+  - name: public-health-and-spa
+    weight: 15
+    flow:
+      - get:
+          name: liveness
+          url: "/api/v1/health/live"
+      - get:
+          name: readiness
+          url: "/api/v1/health/ready"
+      - get:
+          name: openapi-json
+          url: "/openapi/json"
+      - get:
+          name: openapi-ui
+          url: "/openapi"
+      - post:
+          name: compatibility-echo
+          url: "/api/v1/compat/echo"
+          json:
+            value: "benchmark"
+      - get:
+          name: spa-root
+          url: "http://127.0.0.1:5173/"
+      - get:
+          name: spa-login
+          url: "http://127.0.0.1:5173/login"
+      - get:
+          name: spa-dashboard
+          url: "http://127.0.0.1:5173/dashboard"
+      - get:
+          name: spa-search
+          url: "http://127.0.0.1:5173/search"
+      - get:
+          name: spa-register
+          url: "http://127.0.0.1:5173/register"
+      - get:
+          name: spa-drop
+          url: "http://127.0.0.1:5173/drop"
+      - get:
+          name: spa-withdraw
+          url: "http://127.0.0.1:5173/withdraw"
+      - get:
+          name: spa-schedule
+          url: "http://127.0.0.1:5173/schedule"
+      - get:
+          name: spa-exams
+          url: "http://127.0.0.1:5173/exams"
+      - get:
+          name: spa-buildings
+          url: "http://127.0.0.1:5173/buildings"
+      - get:
+          name: spa-faculties
+          url: "http://127.0.0.1:5173/faculties"
+      - get:
+          name: spa-appearance
+          url: "http://127.0.0.1:5173/appearance"

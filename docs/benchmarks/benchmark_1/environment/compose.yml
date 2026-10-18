@@ -1,0 +1,27 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: regchula-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: regchula_root_dev
+      MYSQL_DATABASE: regchula
+      MYSQL_USER: regchula
+      MYSQL_PASSWORD: regchula_dev
+      TZ: Asia/Bangkok
+    ports:
+      - "3307:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uregchula -pregchula_dev --silent"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - regchula_mysql_data:/var/lib/mysql
+
+volumes:
+  regchula_mysql_data:
+

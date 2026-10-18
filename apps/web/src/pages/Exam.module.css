@@ -1,0 +1,230 @@
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
+/* Hallmark · macrostructure: Dual Exam Board + Table · tone: utilitarian-institutional · anchor hue: per-course palette
+ * design-system: design.md · enrichment: none · contrast: pass (40-41)
+ */
+.heroTable {
+  min-width: 52rem;
+}
+
+.conflictBadge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: var(--space-2xs);
+  color: var(--color-error);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.slot {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2xs);
+}
+
+.slot .conflictBadge {
+  color: var(--color-error);
+}
+
+.slotDate,
+.slotTime {
+  font-variant-numeric: tabular-nums;
+}
+
+.slotDate {
+  overflow-wrap: anywhere;
+}
+
+.slotTime,
+.unannounced {
+  color: var(--color-muted);
+}
+
+.tableWrap {
+  display: grid;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: clip;
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-whisper);
+}
+
+.tableHeader {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.tableHeader > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2xs);
+}
+
+.tableHeader h2,
+.tableHeader p {
+  margin: 0;
+}
+
+.tableHeader h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+}
+
+.tableHeader p,
+.tableHeader > span {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.tableHeader > span {
+  flex: 0 0 auto;
+  padding-block-start: var(--space-2xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: var(--space-md);
+  border-block-start: var(--rule-thin) solid var(--color-rule-2);
+  vertical-align: top;
+  text-align: start;
+}
+
+.tableWrap tbody tr {
+  border-inline-start: 4px solid var(--course-color);
+}
+.tableWrap tbody tr[data-conflict="true"] {
+  border-inline-start-color: var(--color-error);
+  background: var(--color-error-soft);
+}
+
+.tableWrap thead th {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.tableWrap thead th:first-child {
+  width: 34%;
+}
+
+.tableWrap thead th:nth-child(2) {
+  width: 8%;
+}
+
+.courseIdentity {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2xs);
+}
+
+.courseIdentity strong {
+  color: var(--color-accent-text);
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.courseIdentity span,
+.courseIdentity small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.courseIdentity small {
+  color: var(--color-muted);
+}
+
+.examBoards {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-md);
+}
+
+.examBoard {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--space-sm);
+}
+
+.examBoard h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+}
+.examBoard ol {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.examBoard li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: var(--rule-thin) solid color-mix(in srgb, var(--course-color) 72%, var(--color-rule));
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-whisper);
+}
+.examBoard li[data-conflict="true"] {
+  border: 2px solid var(--color-error);
+  background: var(--color-error-soft);
+}
+.examIndex {
+  grid-row: 1 / span 2;
+  color: var(--color-ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.examBoard li[data-conflict="true"] .examIndex {
+  color: var(--color-error);
+}
+.examBoard li > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3xs);
+}
+.examBoard li strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.examBoard li small {
+  color: var(--color-muted);
+}
+.examBoard li[data-conflict="true"] small,
+.tableWrap tr[data-conflict="true"] :is(.slotTime, .courseIdentity small) {
+  color: var(--color-ink);
+}
+.examBoardTime {
+  grid-column: 2;
+}
+.examBoard .conflictBadge {
+  grid-column: 2;
+}
+
+@media (min-width: 48rem) {
+  .examBoards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}

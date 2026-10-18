@@ -1,0 +1,9 @@
+{
+  "ConnectionsAccepted": 344610,
+  "ConnectionsInitiated": 419994,
+  "CumulativeConnections": 20158,
+  "CurrentConnections": 5284,
+  "FailedConnectionAttempts": 9274,
+  "ResetConnections": 31038,
+  "SegmentsResent": 2710
+}

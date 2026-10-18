@@ -1,0 +1,126 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "../../../../tokens.css";
+
+html,
+body {
+  min-width: 320px;
+  min-height: 100%;
+  overflow-x: clip;
+}
+
+html {
+  font-size: calc(16px * var(--ui-scale));
+  scroll-padding-block-start: calc(4.5rem + var(--space-lg));
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  transition:
+    background-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+}
+
+:where([data-inline-control]) {
+  min-width: 0;
+}
+
+:where([data-inline-control]) :is(svg, [data-slot="spinner"]) {
+  flex: 0 0 auto;
+}
+
+button:active,
+a:active {
+  transform: translateY(1px);
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+:where([role="menu"], [role="listbox"]):focus-visible {
+  outline: none;
+}
+
+[data-label-style="solid"] .chip--soft.chip--accent {
+  --chip-bg: var(--accent);
+  --chip-fg: var(--accent-foreground);
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+[data-label-style="solid"] .chip--soft.chip--success {
+  --chip-bg: var(--success);
+  --chip-fg: var(--success-foreground);
+  background-color: var(--success);
+  color: var(--success-foreground);
+}
+
+[data-label-style="solid"] .chip--soft.chip--warning {
+  --chip-bg: var(--warning);
+  --chip-fg: var(--warning-foreground);
+  background-color: var(--warning);
+  color: var(--warning-foreground);
+}
+
+[data-label-style="solid"] .chip--soft.chip--danger {
+  --chip-bg: var(--danger);
+  --chip-fg: var(--danger-foreground);
+  background-color: var(--danger);
+  color: var(--danger-foreground);
+}
+
+[data-label-style="solid"] .chip--soft.chip--default {
+  --chip-bg: var(--default);
+  --chip-fg: var(--default-foreground);
+  background-color: var(--default);
+  color: var(--default-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 150ms;
+    animation-iteration-count: 1;
+    transition-duration: 150ms;
+  }
+}

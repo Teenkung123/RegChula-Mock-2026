@@ -1,0 +1,15 @@
+.git
+.codegraph
+.hallmark
+node_modules
+**/node_modules
+tmp
+playwright-report
+test-results
+docs
+.env.local
+.env.k8s.local
+.env.k8s.mysql.local
+.env.k8s.redis.local
+artillery.txt
+*.log

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "k8s-stability-10000-distributed-20260908-133353.json",
+    "created": 10000,
+    "completed": 6545,
+    "failed": 3455,
+    "http200": 83759,
+    "responses": 83759,
+    "p95": 284.3,
+    "p99": 713.5,
+    "identityMatches": null,
+    "minSessionMs": 90252.3
+  },
+  {
+    "file": "k8s-stability-10000-pool128-20260908-134026.json",
+    "created": 10000,
+    "completed": 10000,
+    "failed": 0,
+    "http200": 100000,
+    "responses": 100000,
+    "p95": 12.1,
+    "p99": 16.9,
+    "identityMatches": null,
+    "minSessionMs": 90054.4
+  },
+  {
+    "file": "concurrent-10000-stability-20260908-134809.json",
+    "created": 10000,
+    "completed": 10000,
+    "failed": 0,
+    "http200": 250000,
+    "responses": 250000,
+    "p95": 10.9,
+    "p99": 18,
+    "identityMatches": 20000,
+    "minSessionMs": 300190.5
+  }
+]

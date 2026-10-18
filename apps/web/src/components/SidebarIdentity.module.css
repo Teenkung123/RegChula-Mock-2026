@@ -1,0 +1,38 @@
+.identity {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-height: 45dvh;
+  overflow-y: auto;
+  margin-block-start: auto;
+  padding-block-start: var(--space-sm);
+  border-block-start: var(--rule-thin) solid var(--color-sidebar-rule);
+  color: var(--color-sidebar-ink);
+  font-size: var(--text-xs);
+}
+
+.clock {
+  display: block;
+  margin-block-end: var(--space-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.details {
+  display: grid;
+  gap: var(--space-2xs);
+  margin: 0;
+}
+
+.details > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: var(--space-xs);
+  overflow-wrap: anywhere;
+}
+
+.details dt {
+  color: var(--color-sidebar-muted);
+}
+
+.details dd {
+  margin: 0;
+}

@@ -1,0 +1,65 @@
+.loading {
+  display: grid;
+  place-items: center;
+  padding: var(--space-lg);
+  min-height: 16rem;
+  width: 100%;
+}
+.fullPage {
+  min-height: 100dvh;
+  background: var(--color-paper);
+}
+.content {
+  width: min(100%, 34rem);
+  display: grid;
+  gap: var(--space-lg);
+}
+.heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+.heading strong {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--color-ink);
+}
+.heading p {
+  margin: 0;
+  color: var(--color-muted);
+}
+.preview {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.title {
+  width: 45%;
+  height: 1.5rem;
+  border-radius: var(--radius-sm);
+}
+.line {
+  width: 75%;
+  height: 0.75rem;
+  border-radius: var(--radius-sm);
+}
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin-block-start: var(--space-sm);
+}
+.card {
+  height: 5rem;
+  border-radius: var(--radius-sm);
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading *,
+  .loading *::before,
+  .loading *::after {
+    animation: none;
+  }
+}

@@ -1,0 +1,157 @@
+config:
+  target: "http://127.0.0.1:3000"
+  http:
+    timeout: 5
+  phases:
+    - name: rate-50
+      duration: 20
+      arrivalRate: 50
+      maxVusers: 5000
+    - name: rate-100
+      duration: 15
+      arrivalRate: 100
+      maxVusers: 5000
+    - name: rate-250
+      duration: 15
+      arrivalRate: 250
+      maxVusers: 5000
+    - name: rate-500
+      duration: 15
+      arrivalRate: 500
+      maxVusers: 5000
+    - name: rate-750
+      duration: 15
+      arrivalRate: 750
+      maxVusers: 5000
+    - name: rate-1000
+      duration: 15
+      arrivalRate: 1000
+      maxVusers: 5000
+    - name: rate-1500
+      duration: 15
+      arrivalRate: 1500
+      maxVusers: 5000
+  defaults:
+    headers:
+      origin: "http://localhost:5173"
+  plugins:
+    ensure: {}
+    metrics-by-endpoint:
+      groupDynamicURLs: true
+  ensure:
+    maxErrorRate: 1
+    thresholds:
+      - "http.response_time.p95": 3000
+    conditions:
+      - expression: "vusers.created == 62500"
+      - expression: "vusers.created == vusers.completed"
+      - expression: "http.codes.200 == http.responses"
+
+scenarios:
+  - name: registration-day-autocomplete
+    weight: 65
+    flow:
+      - get:
+          name: auth-challenge
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          name: auth-login
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "bench-global-{{ $randomString() }}"
+            password: "local-load-test-only"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          name: autocomplete
+          url: "/api/v1/courses?page=1&pageSize=8&mode=autocomplete&q=99"
+      - get:
+          name: catalog-options
+          url: "/api/v1/catalog/options"
+      - get:
+          name: current-user
+          url: "/api/v1/me"
+
+  - name: registration-day-detail
+    weight: 20
+    flow:
+      - get:
+          name: auth-challenge
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          name: auth-login
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "bench-global-{{ $randomString() }}"
+            password: "local-load-test-only"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          name: course-detail
+          url: "/api/v1/courses/9999901"
+      - get:
+          name: course-reviews
+          url: "/api/v1/courses/9999901/reviews?page=1&pageSize=10"
+      - get:
+          name: terms
+          url: "/api/v1/terms"
+      - get:
+          name: announcements
+          url: "/api/v1/announcements"
+
+  - name: registration-day-batch-preview
+    weight: 15
+    flow:
+      - get:
+          name: auth-challenge
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          name: auth-login
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "bench-global-{{ $randomString() }}"
+            password: "local-load-test-only"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          name: course-detail-1
+          url: "/api/v1/courses/9999901"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: section1
+      - get:
+          name: course-detail-2
+          url: "/api/v1/courses/9999902"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: section2
+      - get:
+          name: course-detail-3
+          url: "/api/v1/courses/9999903"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: section3
+      - post:
+          name: registration-batch-preview
+          url: "/api/v1/registrations/batch-preview"
+          json:
+            choices:
+              - sectionId: "{{ section1 }}"
+              - sectionId: "{{ section2 }}"
+              - sectionId: "{{ section3 }}"
+            allowAdvisoryOverride: true

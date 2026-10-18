@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>RegChula</title>
+  <rect width="32" height="32" rx="7" fill="#0d0e12"/>
+  <path d="M4 13 16 7l12 6-12 6Z" fill="#db5f8d"/>
+  <path d="M9 18v5c4 3 10 3 14 0v-5l-7 3.5Z" fill="#db5f8d"/>
+  <path d="M27 15v7" fill="none" stroke="#db5f8d" stroke-width="2" stroke-linecap="round"/>
+</svg>

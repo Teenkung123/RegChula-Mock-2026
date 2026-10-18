@@ -1,0 +1,114 @@
+config:
+  target: "http://127.0.0.1:3000"
+  http:
+    timeout: 5
+  plugins:
+    ensure: {}
+    metrics-by-endpoint: {}
+  phases:
+    - name: warm-up
+      duration: 20
+      arrivalRate: 5
+      rampTo: 25
+      maxVusers: 200
+    - name: ramp
+      duration: 40
+      arrivalRate: 25
+      rampTo: 100
+      maxVusers: 500
+    - name: sustained-peak
+      duration: 60
+      arrivalRate: 100
+      maxVusers: 500
+  defaults:
+    headers:
+      origin: "http://localhost:5173"
+  ensure:
+    maxErrorRate: 1
+    thresholds:
+      - "http.response_time.p95": 750
+    conditions:
+      - expression: "vusers.created == vusers.completed"
+      - expression: "http.codes.200 == http.responses"
+
+scenarios:
+  - name: catalog-search-session
+    weight: 70
+    flow:
+      - get:
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "artillery-{{ $randomString() }}"
+            password: "load-test"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          url: "/api/v1/courses?page=1&pageSize=8&mode=autocomplete&q=2"
+      - get:
+          url: "/api/v1/catalog/options"
+      - get:
+          url: "/api/v1/me"
+
+  - name: course-detail-session
+    weight: 20
+    flow:
+      - get:
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "artillery-{{ $randomString() }}"
+            password: "load-test"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          url: "/api/v1/courses/2000501"
+      - get:
+          url: "/api/v1/terms"
+
+  - name: registration-preview-session
+    weight: 10
+    flow:
+      - get:
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "artillery-{{ $randomString() }}"
+            password: "load-test"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          url: "/api/v1/courses/2000501"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: sectionId
+      - get:
+          url: "/api/v1/courses/0123106"
+          capture:
+            - json: "$.data.sections[0].id"
+              as: alternateCourseSectionId
+      - post:
+          url: "/api/v1/registrations/batch-preview"
+          json:
+            choices:
+              - sectionId: "{{ sectionId }}"
+              - sectionId: "{{ alternateCourseSectionId }}"
+            allowAdvisoryOverride: false

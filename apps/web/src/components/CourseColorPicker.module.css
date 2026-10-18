@@ -1,0 +1,92 @@
+/* Hallmark · component: course-color-picker · genre: modern-minimal · design-system: design.md */
+.trigger[data-slot="popover-trigger"] {
+  display: inline-flex;
+  min-width: 2.75rem;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2xs);
+  flex-wrap: nowrap;
+  padding-inline: var(--space-xs);
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-sm);
+  background: var(--color-secondary-control);
+  color: var(--color-ink-2);
+  cursor: pointer;
+}
+.trigger[data-slot="popover-trigger"] > svg {
+  flex: 0 0 auto;
+}
+.currentSwatch {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  border: var(--rule-thin) solid var(--swatch-color);
+  border-radius: var(--radius-pill);
+  background: var(--swatch-color);
+}
+.popover {
+  z-index: var(--z-dropdown);
+  width: min(19rem, calc(100vw - 2rem));
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-float);
+}
+.dialog {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+}
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 2.5rem);
+  gap: var(--space-xs);
+}
+.swatches button {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border: var(--rule-thin) solid color-mix(in srgb, var(--swatch-color) 70%, var(--color-ink));
+  border-radius: var(--radius-pill);
+  background: var(--swatch-color);
+  color: var(--swatch-ink);
+  cursor: pointer;
+}
+.swatches button[aria-pressed="true"] {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.trigger[data-slot="popover-trigger"]:focus-visible,
+.swatches button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.trigger[data-slot="popover-trigger"]:active,
+.swatches button:active {
+  transform: translateY(1px);
+}
+.trigger[data-slot="popover-trigger"][aria-disabled="true"],
+.swatches button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .trigger[data-slot="popover-trigger"]:hover {
+    background: var(--color-paper-3);
+  }
+  .swatches button:hover {
+    border-color: var(--color-ink);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trigger[data-slot="popover-trigger"],
+  .swatches button {
+    transition-duration: 0ms;
+  }
+}

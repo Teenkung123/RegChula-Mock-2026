@@ -1,0 +1,8 @@
+{
+  "plannedUsers": 10000,
+  "peakAuthenticated": 10000,
+  "fullOverlapSamples": 24,
+  "fullOverlapSpanSeconds": 230,
+  "requiredOverlapSeconds": 180,
+  "passed": true
+}

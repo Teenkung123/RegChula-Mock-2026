@@ -1,0 +1,113 @@
+config:
+  target: "http://127.0.0.1:3000"
+  http:
+    timeout: 10
+  phases:
+    - name: catalog-filter-matrix
+      duration: 1
+      arrivalCount: 1
+      maxVusers: 1
+  defaults:
+    headers:
+      origin: "http://localhost:5173"
+  plugins:
+    ensure: {}
+    metrics-by-endpoint:
+      groupDynamicURLs: true
+  ensure:
+    maxErrorRate: 0
+    thresholds:
+      - "http.response_time.p95": 3000
+    conditions:
+      - expression: "vusers.created == 1"
+      - expression: "vusers.created == vusers.completed"
+      - expression: "http.codes.200 == http.responses"
+
+scenarios:
+  - name: every-catalog-filter-family
+    flow:
+      - get:
+          name: auth-challenge
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          name: auth-login
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "bench-global-catalog-matrix"
+            password: "benchmark-only"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          name: autocomplete-empty
+          url: "/api/v1/courses?page=1&pageSize=8&mode=autocomplete"
+      - get:
+          name: autocomplete-numeric
+          url: "/api/v1/courses?page=1&pageSize=8&mode=autocomplete&q=21"
+      - get:
+          name: search-explicit-current-term
+          url: "/api/v1/courses?academicYear=2569&semester=1&page=1&pageSize=20"
+      - get:
+          name: search-historical-term
+          url: "/api/v1/courses?academicYear=2568&semester=2&page=1&pageSize=20"
+      - get:
+          name: search-faculty
+          url: "/api/v1/courses?faculty=21&page=1&pageSize=20"
+      - get:
+          name: search-multiple-faculties
+          url: "/api/v1/courses?faculties=21,23&page=1&pageSize=20"
+      - get:
+          name: search-department
+          url: "/api/v1/courses?department=2101&page=1&pageSize=20"
+      - get:
+          name: search-multiple-departments
+          url: "/api/v1/courses?departments=2101,2301&page=1&pageSize=20"
+      - get:
+          name: search-gened-types
+          url: "/api/v1/courses?genEdTypes=SC,SO,HU&page=1&pageSize=20"
+      - get:
+          name: search-general-group
+          url: "/api/v1/courses?courseGroup=general&page=1&pageSize=20"
+      - get:
+          name: search-other-group
+          url: "/api/v1/courses?courseGroup=other&page=1&pageSize=20"
+      - get:
+          name: search-single-day
+          url: "/api/v1/courses?day=MO&page=1&pageSize=20"
+      - get:
+          name: search-multiple-days
+          url: "/api/v1/courses?days=MO,WE,FR&page=1&pageSize=20"
+      - get:
+          name: search-start-only
+          url: "/api/v1/courses?startTime=09:00&page=1&pageSize=20"
+      - get:
+          name: search-end-only
+          url: "/api/v1/courses?endTime=16:00&page=1&pageSize=20"
+      - get:
+          name: search-time-window
+          url: "/api/v1/courses?startTime=09:00&endTime=16:00&page=1&pageSize=20"
+      - get:
+          name: search-exact-credits
+          url: "/api/v1/courses?credits=3&page=1&pageSize=20"
+      - get:
+          name: search-credit-range
+          url: "/api/v1/courses?minCredits=1&maxCredits=3&page=1&pageSize=20"
+      - get:
+          name: search-combined
+          url: "/api/v1/courses?faculties=21,23&days=MO,WE&startTime=09:00&endTime=16:00&minCredits=1&maxCredits=3&page=1&pageSize=20"
+      - get:
+          name: search-page-size-50
+          url: "/api/v1/courses?page=1&pageSize=50"
+      - get:
+          name: search-deep-page
+          url: "/api/v1/courses?page=473&pageSize=20"
+      - get:
+          name: search-no-match
+          url: "/api/v1/courses?q=zzzauditnomatchzzz&page=1&pageSize=20"
+      - post:
+          name: auth-logout
+          url: "/api/v1/auth/logout"

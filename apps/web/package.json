@@ -1,0 +1,41 @@
+{
+  "name": "@regchula/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@elysia/eden": "2.0.0-beta.5",
+    "@fontsource-variable/anuphan": "5.3.0",
+    "@fontsource-variable/noto-sans-thai": "5.3.0",
+    "@heroui/react": "3.2.4",
+    "@heroui/styles": "3.2.4",
+    "@internationalized/date": "3.12.4",
+    "@regchula/api": "workspace:*",
+    "@regchula/appearance": "workspace:*",
+    "@tanstack/react-query": "5.102.8",
+    "country-flag-icons": "1.6.20",
+    "html-to-image": "1.11.13",
+    "lucide-react": "1.39.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router": "7.18.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.1",
+    "jsdom": "30.0.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  }
+}

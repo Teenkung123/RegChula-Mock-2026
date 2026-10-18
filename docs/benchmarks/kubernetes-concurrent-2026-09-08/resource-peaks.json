@@ -1,0 +1,47 @@
+[
+  {
+    "pod": "regchula-api-8469f4dc-b4sx5",
+    "peakCpuMillicores": 622.0,
+    "peakMemoryMiB": 179.0
+  },
+  {
+    "pod": "regchula-api-8469f4dc-gpfm7",
+    "peakCpuMillicores": 664.0,
+    "peakMemoryMiB": 181.0
+  },
+  {
+    "pod": "regchula-api-8469f4dc-l5cz2",
+    "peakCpuMillicores": 582.0,
+    "peakMemoryMiB": 171.0
+  },
+  {
+    "pod": "regchula-auth-cleanup-29814130-h7tqp",
+    "peakCpuMillicores": 0.0,
+    "peakMemoryMiB": 0.0
+  },
+  {
+    "pod": "regchula-auth-cleanup-29814140-v6g6k",
+    "peakCpuMillicores": 0.0,
+    "peakMemoryMiB": 0.0
+  },
+  {
+    "pod": "regchula-mysql-0",
+    "peakCpuMillicores": 807.0,
+    "peakMemoryMiB": 752.0
+  },
+  {
+    "pod": "regchula-redis-0",
+    "peakCpuMillicores": 216.0,
+    "peakMemoryMiB": 18.0
+  },
+  {
+    "pod": "regchula-web-5b8cdf8c87-8z2mr",
+    "peakCpuMillicores": 383.0,
+    "peakMemoryMiB": 163.0
+  },
+  {
+    "pod": "regchula-web-5b8cdf8c87-h92rs",
+    "peakCpuMillicores": 0.0,
+    "peakMemoryMiB": 146.0
+  }
+]

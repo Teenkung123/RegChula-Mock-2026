@@ -1,0 +1,131 @@
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
+/* Hallmark · macrostructure: Directory Index · tone: utilitarian institutional workspace
+ * design-system: RegChula tokens · enrichment: none · contrast: token-governed
+ */
+.workspace {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-md);
+}
+
+.toolbar,
+.list,
+.empty {
+  border: var(--rule-thin) solid var(--color-rule);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-whisper);
+}
+
+.toolbar {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-md);
+  padding: var(--space-md);
+}
+
+.searchHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-accent-text);
+}
+
+.searchHeading > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3xs);
+  color: var(--color-ink);
+}
+
+.searchHeading strong {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+}
+
+.searchHeading span,
+.source {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.searchField {
+  min-width: 0;
+}
+
+.list {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  overflow: clip;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(5.5rem, 0.3fr) minmax(0, 1fr);
+  gap: var(--space-sm);
+  padding: var(--space-md);
+}
+
+.item + .item {
+  border-block-start: var(--rule-thin) solid var(--color-rule-2);
+}
+
+.code {
+  align-self: start;
+  color: var(--color-accent-text);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.names {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3xs);
+}
+
+.names strong,
+.names small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.names strong {
+  color: var(--color-ink);
+}
+
+.names small {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.empty,
+.source {
+  margin: 0;
+}
+
+.empty {
+  padding: var(--space-lg);
+  color: var(--color-muted);
+}
+
+.source {
+  padding-inline: var(--space-sm);
+}
+
+@media (min-width: 48rem) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.7fr);
+    align-items: center;
+  }
+
+  .item {
+    grid-template-columns: 9rem minmax(0, 1fr);
+  }
+}

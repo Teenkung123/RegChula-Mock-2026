@@ -1,0 +1,45 @@
+/* Hallmark · component: color picker · genre: modern-minimal · theme: RegChula locked system
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: token-governed · critique: P5 H5 E5 S5 R5 V4
+ */
+.content {
+  display: grid;
+  gap: var(--space-md);
+}
+.trigger,
+.field,
+.actions button,
+.paletteItem {
+  min-width: 44px;
+  min-height: 44px;
+}
+.area {
+  width: 100%;
+  max-width: 18rem;
+  height: auto;
+  aspect-ratio: 1;
+  justify-self: center;
+}
+.slider {
+  width: 100%;
+  max-width: 18rem;
+  min-height: 44px;
+  justify-content: center;
+  justify-self: center;
+}
+.track {
+  min-height: 20px;
+}
+.thumb::before {
+  content: "";
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}

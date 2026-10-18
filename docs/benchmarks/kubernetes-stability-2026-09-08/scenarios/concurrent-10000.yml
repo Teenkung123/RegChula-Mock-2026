@@ -1,0 +1,74 @@
+config:
+  target: "http://127.0.0.1:3000"
+  processor: "./concurrent.cjs"
+  http:
+    timeout: 5
+    # Per-worker transport pool; cookie jars remain separate for every VU.
+    pool: 128
+  variables:
+    sessionPolls: 6
+  phases:
+    # arrivalCount uses one local worker in Artillery 2.0.30. Rates distribute.
+    - name: ten-thousand-active-sessions-a
+      duration: 20
+      arrivalRate: 166
+      maxVusers: 12000
+    - name: ten-thousand-active-sessions-b
+      duration: 40
+      arrivalRate: 167
+      maxVusers: 12000
+  defaults:
+    headers:
+      origin: "http://localhost:5173"
+  plugins:
+    ensure: {}
+    metrics-by-endpoint:
+      groupDynamicURLs: true
+  ensure:
+    maxErrorRate: 1
+    thresholds:
+      - "http.response_time.p95": 3000
+    conditions:
+      - expression: "vusers.created == 10000"
+      - expression: "vusers.created == vusers.completed"
+      - expression: "http.codes.200 == http.responses"
+      - expression: "http.requests == 110000"
+      - expression: "http.codes.200 == 110000"
+      - expression: "validation.identity_matched == 20000"
+
+scenarios:
+  - name: active-student-session
+    beforeScenario: createStudent
+    afterResponse: verifyIdentity
+    flow:
+      - get:
+          name: auth-challenge
+          url: "/api/v1/auth/challenge"
+          capture:
+            - json: "$.data.code"
+              as: challengeCode
+            - json: "$.data.token"
+              as: challengeToken
+      - post:
+          name: auth-login
+          url: "/api/v1/auth/login"
+          json:
+            studentId: "{{ studentId }}"
+            password: "local-load-test-only"
+            challengeCode: "{{ challengeCode }}"
+            challengeToken: "{{ challengeToken }}"
+      - get:
+          name: current-user
+          url: "/api/v1/me"
+      - loop:
+          - get:
+              name: autocomplete-active-session
+              url: "/api/v1/courses?page=1&pageSize=8&mode=autocomplete&q=99"
+          - think: 15
+        count: "{{ sessionPolls }}"
+      - get:
+          name: catalog-options
+          url: "/api/v1/catalog/options"
+      - get:
+          name: final-current-user
+          url: "/api/v1/me"
