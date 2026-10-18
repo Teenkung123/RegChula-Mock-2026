@@ -6,7 +6,7 @@
 - Consecutive same-day active classes from the existing `/api/v1/schedule` response; arranged, dropped, withdrawn and invalid meetings are omitted.
 - Day/transition selection, explicit sample mode (MHMK M01 → TAB220), gap/overlap warnings, unknown-code and disconnected-route states.
 - Client-side Dijkstra over the supplied filtered pedestrian graph, with pedestrian one-way restrictions. No straight-line fallback.
-- Lazy-loaded Three.js viewer for the supplied v3 GLB: fixed north-up overhead view, bounded pan/zoom, fit, keyboard controls, mobile interaction opt-in, retry/fallback and disposal.
+- Lazy-loaded Three.js viewer for the supplied v3 GLB: fixed north-up overhead perspective view, bounded pan/zoom, fit, keyboard controls, mobile interaction opt-in, retry/fallback and disposal.
 - Thai, English and Chinese UI. No geolocation calls, GPS tracking, location permissions or new backend endpoints.
 
 ## Data and estimates
@@ -32,7 +32,7 @@ Use Bun 1.3.14 as already required. New approved dependency: three 0.186.1; deve
 
 The API still requires the project's existing MySQL/Redis/catalog setup; this feature adds no migrations. The source package is a change overlay, not a replacement repository or database.
 
-The fixed-camera and interface revision is documented in REVISION-2.md.
+The fixed-camera and interface revision is documented in REVISION-2.md. The subsequent depth-preserving perspective refinement is documented in REVISION-3.md.
 
 ## Verification performed for the original publication in cloud copy
 

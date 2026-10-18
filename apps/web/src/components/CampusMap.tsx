@@ -14,7 +14,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   Object3D,
-  OrthographicCamera,
+  PerspectiveCamera,
   Scene,
   SphereGeometry,
   SRGBColorSpace,
@@ -179,7 +179,7 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
     let height = 1
     const request = new AbortController()
     const scene = new Scene()
-    const camera = new OrthographicCamera()
+    const camera = new PerspectiveCamera()
     let inputEnabled = false
     let groundBounds: MapBounds = { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000 }
     let modelHeights = { min: -10, max: 400 }

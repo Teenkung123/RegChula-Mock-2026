@@ -1,4 +1,4 @@
-import { type OrthographicCamera, Vector3 } from "three"
+import { type PerspectiveCamera, Vector3 } from "three"
 
 /** Local terrain coordinates: x east, y north; all distances in metres. */
 export interface MapPoint {
@@ -12,8 +12,13 @@ export interface MapBounds {
   maxY: number
 }
 export interface MapView extends MapPoint {
+  /** Visible north/south span at the scene's lowest datum, not at camera height. */
   spanY: number
 }
+
+export const MAP_VERTICAL_FOV = 46
+export const MAP_CAMERA_CLEARANCE = 80
+export const MAP_CLIP_MARGIN = 20
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const validAspect = (aspect: number) => (Number.isFinite(aspect) && aspect > 0 ? aspect : 1)
@@ -110,23 +115,31 @@ export function zoomMapView(
   )
 }
 
-/** No lookAt/spherical controller: the quaternion is reset to exact nadir on every update. */
+/**
+ * Fixed-nadir perspective. Dolly at the nominal lens until the roof-safe altitude
+ * floor, then narrow the lens so close zoom remains available without entering a
+ * building. The footprint at the lowest datum is exactly view.spanY; every higher
+ * ground surface has a smaller footprint, preserving the existing edge clamp.
+ */
 export function applyNorthUpCamera(
-  camera: OrthographicCamera,
+  camera: PerspectiveCamera,
   view: MapView,
   aspect: number,
   heights = { min: -10, max: 400 },
 ) {
-  const halfY = view.spanY / 2
-  const halfX = halfY * validAspect(aspect)
-  camera.left = -halfX
-  camera.right = halfX
-  camera.top = halfY
-  camera.bottom = -halfY
+  const nominalHalfFov = (MAP_VERTICAL_FOV * Math.PI) / 360
+  const altitude = Math.max(
+    heights.min + view.spanY / (2 * Math.tan(nominalHalfFov)),
+    heights.max + MAP_CAMERA_CLEARANCE,
+  )
+  const datumDistance = altitude - heights.min
+  camera.fov = (Math.atan(view.spanY / (2 * datumDistance)) * 360) / Math.PI
+  camera.aspect = validAspect(aspect)
   camera.zoom = 1
-  camera.near = 1
-  camera.far = heights.max - heights.min + 200
-  camera.position.set(view.x, heights.max + 100, -view.y)
+  // Keep the depth buffer concentrated on the model, rather than a huge 0.5–40000m range.
+  camera.near = Math.max(1, altitude - heights.max - MAP_CLIP_MARGIN)
+  camera.far = datumDistance + MAP_CLIP_MARGIN
+  camera.position.set(view.x, altitude, -view.y)
   camera.up.set(0, 0, -1)
   camera.quaternion.setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2)
   camera.updateProjectionMatrix()

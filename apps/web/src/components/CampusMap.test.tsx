@@ -5,8 +5,9 @@ import {
   Group,
   Mesh,
   MeshBasicMaterial,
-  type OrthographicCamera,
+  type PerspectiveCamera,
   type Scene,
+  Vector3,
 } from "three"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { CampusMap } from "./CampusMap"
@@ -134,14 +135,22 @@ describe("campus map lifecycle and controls", () => {
       mocks.resize?.()
     })
     await waitFor(() => expect(mocks.render).toHaveBeenCalled())
-    const camera = mocks.render.mock.lastCall?.[1] as OrthographicCamera
+    const camera = mocks.render.mock.lastCall?.[1] as PerspectiveCamera
     expect(camera.rotation.x).toBeCloseTo(-Math.PI / 2, 14)
     expect(camera.rotation.y).toBeCloseTo(0, 14)
     expect(camera.rotation.z).toBeCloseTo(0, 14)
-    expect(camera.position.x + camera.left).toBeGreaterThan(-1250)
-    expect(camera.position.x + camera.right).toBeLessThan(1250)
-    expect(-camera.position.z + camera.bottom).toBeGreaterThan(-1150)
-    expect(-camera.position.z + camera.top).toBeLessThan(1150)
+    for (const x of [-1, 1]) {
+      for (const y of [-1, 1]) {
+        const ray = new Vector3(x, y, 0.5).unproject(camera).sub(camera.position).normalize()
+        const groundPoint = camera.position
+          .clone()
+          .addScaledVector(ray, (-0.5 - camera.position.y) / ray.y)
+        expect(groundPoint.x).toBeGreaterThan(-1250)
+        expect(groundPoint.x).toBeLessThan(1250)
+        expect(groundPoint.z).toBeGreaterThan(-1150)
+        expect(groundPoint.z).toBeLessThan(1150)
+      }
+    }
   })
 
   it("preserves exact north-up after keyboard movement, zoom, reset and Escape", async () => {
@@ -162,8 +171,8 @@ describe("campus map lifecycle and controls", () => {
     fireEvent.keyDown(viewport, { key: "+" })
     fireEvent.click(screen.getByRole("button", { name: "Fit route / reset view" }))
     await waitFor(() => expect(mocks.render).toHaveBeenCalled())
-    for (const [, camera] of mocks.render.mock.calls as [Scene, OrthographicCamera][]) {
-      expect(camera.isOrthographicCamera).toBe(true)
+    for (const [, camera] of mocks.render.mock.calls as [Scene, PerspectiveCamera][]) {
+      expect(camera.isPerspectiveCamera).toBe(true)
       expect(camera.rotation.x).toBeCloseTo(-Math.PI / 2, 14)
       expect(camera.rotation.y).toBeCloseTo(0, 14)
       expect(camera.rotation.z).toBeCloseTo(0, 14)
