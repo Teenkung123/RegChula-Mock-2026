@@ -14,18 +14,25 @@ import {
   Mesh,
   MeshBasicMaterial,
   Object3D,
-  PerspectiveCamera,
+  OrthographicCamera,
   Scene,
   SphereGeometry,
-  Spherical,
   SRGBColorSpace,
   Texture,
   Vector3,
   WebGLRenderer,
 } from "three"
-import { OrbitControls } from "three/addons/controls/OrbitControls.js"
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"
 import styles from "./CampusMap.module.css"
+import {
+  applyNorthUpCamera,
+  clampMapView,
+  fitMapView,
+  type MapBounds,
+  type MapView,
+  panMapView,
+  zoomMapView,
+} from "./campus-map-camera"
 import { Button } from "./ui"
 
 export interface CampusMapPoint {
@@ -36,6 +43,7 @@ export interface CampusMapPoint {
 
 export interface CampusMapLabels {
   map: string
+  north: string
   loading: string
   unavailable: string
   retry: string
@@ -56,18 +64,20 @@ export interface CampusMapProps {
 }
 
 const defaultLabels: CampusMapLabels = {
-  map: "3D campus route map",
+  map: "North-up campus route map",
+  north: "North",
   loading: "Loading the campus model…",
   unavailable: "The 3D map is unavailable. You can still use the route details on this page.",
   retry: "Try loading the map again",
-  explore: "Explore map",
-  stopExploring: "Done exploring",
+  explore: "Move map",
+  stopExploring: "Done moving",
   reset: "Fit route / reset view",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
-  instructions: "Choose Explore map to rotate and pan. Zoom and reset buttons work at any time.",
+  instructions:
+    "North stays at the top. Choose Move map to drag, or use the zoom and reset buttons.",
   activeInstructions:
-    "Drag to rotate; use two fingers or right-drag to pan. Arrow keys rotate, +/− zoom, and Escape exits.",
+    "Drag or use arrow keys to move. Pinch or use +/− to zoom. Escape finishes moving the map.",
 }
 
 type MapInput = Pick<CampusMapProps, "route" | "endpoints">
@@ -169,16 +179,17 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
     let height = 1
     const request = new AbortController()
     const scene = new Scene()
-    const camera = new PerspectiveCamera(38, 1, 0.5, 40000)
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = false
-    controls.screenSpacePanning = false
-    controls.minDistance = 65
-    controls.maxDistance = 20000
-    controls.minPolarAngle = 0.12
-    controls.maxPolarAngle = Math.PI / 2.8
-    controls.rotateSpeed = 0.65
-    controls.maxTargetRadius = 2500
+    const camera = new OrthographicCamera()
+    let inputEnabled = false
+    let groundBounds: MapBounds = { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000 }
+    let modelHeights = { min: -10, max: 400 }
+    let view: MapView = { x: 0, y: 0, spanY: 1500 }
+    let defaultPoints = [
+      { x: -700, y: -600 },
+      { x: 700, y: 600 },
+    ]
+    const pointers = new Map<number, { x: number; y: number }>()
+    let gesture: { x: number; y: number; distance: number } | null = null
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
     renderer.outputColorSpace = SRGBColorSpace
     renderer.toneMapping = ACESFilmicToneMapping
@@ -196,13 +207,14 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
     let routeMaterial: MeshBasicMaterial | null = null
     let haloMaterial: MeshBasicMaterial | null = null
     let input = latestInput.current
-    let defaultBounds = new Box3(new Vector3(-850, 0, -750), new Vector3(850, 60, 750))
     let markers: { element: HTMLElement; position: Vector3 }[] = []
     const projected = new Vector3()
 
     function render() {
       frame = 0
       if (disposed || contextLost) return
+      view = clampMapView(view, groundBounds, width / height)
+      applyNorthUpCamera(camera, view, width / height, modelHeights)
       try {
         renderer.render(scene, camera)
       } catch {
@@ -239,24 +251,8 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
     }
 
     function fitView() {
-      const points = [...input.route, ...input.endpoints]
-        .filter(isFinitePoint)
-        .map((point) => toWorld(point))
-      const bounds = points.length ? new Box3().setFromPoints(points) : defaultBounds
-      const center = bounds.getCenter(new Vector3())
-      center.y = 0
-      const radius = Math.max(110, bounds.getSize(new Vector3()).length() / 2)
-      const halfVertical = (camera.fov * Math.PI) / 360
-      const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect)
-      const distance = Math.min(
-        controls.maxDistance,
-        (radius / Math.sin(Math.min(halfVertical, halfHorizontal))) * 1.2,
-      )
-      controls.target.copy(center)
-      camera.position
-        .copy(center)
-        .add(new Vector3(0.5, 1.25, 0.85).normalize().multiplyScalar(distance))
-      controls.update()
+      const points = [...input.route, ...input.endpoints].filter(isFinitePoint)
+      view = fitMapView(points.length ? points : defaultPoints, groundBounds, width / height)
       invalidate()
     }
 
@@ -358,25 +354,36 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       fitView()
     }
 
-    function zoom(factor: number) {
+    function zoom(factor: number, anchor = { x: 0.5, y: 0.5 }) {
       manualView = true
-      const offset = camera.position.clone().sub(controls.target)
-      offset.setLength(
-        Math.min(controls.maxDistance, Math.max(controls.minDistance, offset.length() * factor)),
-      )
-      camera.position.copy(controls.target).add(offset)
-      controls.update()
+      view = zoomMapView(view, factor, groundBounds, width / height, anchor)
       invalidate()
     }
 
+    function clearPointers() {
+      for (const pointerId of pointers.keys()) {
+        if (renderer.domElement.hasPointerCapture(pointerId))
+          renderer.domElement.releasePointerCapture(pointerId)
+      }
+      pointers.clear()
+      gesture = null
+    }
+
     function setMapInteractive(active: boolean) {
-      controls.enabled = active
+      inputEnabled = active
+      if (!active) clearPointers()
       renderer.domElement.style.pointerEvents = active ? "auto" : "none"
       renderer.domElement.style.touchAction = active ? "none" : "pan-y pinch-zoom"
     }
 
+    function pan(deltaX: number, deltaY: number) {
+      manualView = true
+      view = panMapView(view, deltaX, deltaY, groundBounds, width / height)
+      invalidate()
+    }
+
     function onKeyDown(event: KeyboardEvent) {
-      if (!controls.enabled || event.target !== viewport) return
+      if (!inputEnabled || event.target !== viewport) return
       if (event.key === "Escape") {
         setInteractive(false)
         exploreButtonRef.current?.focus()
@@ -387,32 +394,83 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
         zoom(event.key === "-" ? 1.25 : 0.8)
       } else if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault()
-        manualView = true
-        const spherical = new Spherical().setFromVector3(
-          camera.position.clone().sub(controls.target),
+        const step = view.spanY * 0.08
+        pan(
+          event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0,
+          event.key === "ArrowUp" ? step : event.key === "ArrowDown" ? -step : 0,
         )
-        spherical.theta += event.key === "ArrowLeft" ? -0.12 : event.key === "ArrowRight" ? 0.12 : 0
-        spherical.phi = Math.max(
-          controls.minPolarAngle,
-          Math.min(
-            controls.maxPolarAngle,
-            spherical.phi +
-              (event.key === "ArrowUp" ? -0.12 : event.key === "ArrowDown" ? 0.12 : 0),
-          ),
-        )
-        camera.position.copy(controls.target).add(new Vector3().setFromSpherical(spherical))
-        controls.update()
-        invalidate()
       }
+    }
+
+    function currentGesture() {
+      const values = [...pointers.values()]
+      const first = values[0]
+      if (!first) return null
+      const second = values[1]
+      return second
+        ? {
+            x: (first.x + second.x) / 2,
+            y: (first.y + second.y) / 2,
+            distance: Math.hypot(second.x - first.x, second.y - first.y),
+          }
+        : { ...first, distance: 0 }
+    }
+
+    function onPointerDown(event: PointerEvent) {
+      if (!inputEnabled || (event.button !== 0 && event.button !== 2)) return
+      event.preventDefault()
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      renderer.domElement.setPointerCapture(event.pointerId)
+      gesture = currentGesture()
+    }
+
+    function onPointerMove(event: PointerEvent) {
+      if (!inputEnabled || !pointers.has(event.pointerId)) return
+      event.preventDefault()
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      const next = currentGesture()
+      if (gesture && next) {
+        const metresPerPixel = view.spanY / height
+        pan(-(next.x - gesture.x) * metresPerPixel, (next.y - gesture.y) * metresPerPixel)
+        if (gesture.distance > 0 && next.distance > 0) {
+          const rect = renderer.domElement.getBoundingClientRect()
+          zoom(gesture.distance / next.distance, {
+            x: (next.x - rect.left) / width,
+            y: (next.y - rect.top) / height,
+          })
+        }
+      }
+      gesture = next
+    }
+
+    function onPointerEnd(event: PointerEvent) {
+      pointers.delete(event.pointerId)
+      if (renderer.domElement.hasPointerCapture(event.pointerId))
+        renderer.domElement.releasePointerCapture(event.pointerId)
+      gesture = currentGesture()
+    }
+
+    function onWheel(event: WheelEvent) {
+      if (!inputEnabled) return
+      event.preventDefault()
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? height : 1
+      const rect = renderer.domElement.getBoundingClientRect()
+      zoom(Math.exp(Math.max(-0.7, Math.min(0.7, event.deltaY * unit * 0.0015))), {
+        x: (event.clientX - rect.left) / width,
+        y: (event.clientY - rect.top) / height,
+      })
+    }
+
+    function onContextMenu(event: MouseEvent) {
+      if (inputEnabled) event.preventDefault()
     }
 
     function resize() {
       width = Math.max(viewport.clientWidth, 1)
       height = Math.max(viewport.clientHeight, 1)
       renderer.setSize(width, height, false)
-      camera.aspect = width / height
-      camera.updateProjectionMatrix()
       if (!manualView) fitView()
+      else view = clampMapView(view, groundBounds, width / height)
       invalidate()
     }
 
@@ -424,11 +482,14 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       setInteractive(false)
     }
 
-    const onInteraction = () => {
-      manualView = true
-    }
-    controls.addEventListener("change", invalidate)
-    controls.addEventListener("start", onInteraction)
+    renderer.domElement.addEventListener("pointerdown", onPointerDown)
+    renderer.domElement.addEventListener("pointermove", onPointerMove)
+    renderer.domElement.addEventListener("pointerup", onPointerEnd)
+    renderer.domElement.addEventListener("pointercancel", onPointerEnd)
+    renderer.domElement.addEventListener("lostpointercapture", onPointerEnd)
+    renderer.domElement.addEventListener("wheel", onWheel, { passive: false })
+    renderer.domElement.addEventListener("contextmenu", onContextMenu)
+    window.addEventListener("blur", clearPointers)
     viewport.addEventListener("keydown", onKeyDown)
     renderer.domElement.addEventListener("webglcontextlost", onContextLost)
     const resizeObserver = new ResizeObserver(resize)
@@ -466,15 +527,42 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
           return
         }
         scene.add(gltf.scene)
-        // The supplied asset already uses glTF (east, up, south) axes and metres.
-        // Keep the surrounding city visible, but default to the central campus.
+        // Use only the ground slab for the boundary: roads and buildings can protrude beyond it.
         const modelBounds = new Box3().setFromObject(gltf.scene)
-        if (!modelBounds.isEmpty()) {
-          const size = modelBounds.getSize(new Vector3()).multiplyScalar(0.65)
-          const center = modelBounds.getCenter(new Vector3())
-          center.y = 0
-          defaultBounds = new Box3().setFromCenterAndSize(center, size)
-        }
+        const campusBounds = new Box3()
+        gltf.scene.traverse((object) => {
+          if (!(object instanceof Mesh)) return
+          if (object.userData.role === "presentation_ground") {
+            const ground = new Box3().setFromObject(object)
+            groundBounds = {
+              minX: ground.min.x,
+              maxX: ground.max.x,
+              minY: -ground.max.z,
+              maxY: -ground.min.z,
+            }
+          }
+          if (object.userData.role === "campus_boundary")
+            campusBounds.union(new Box3().setFromObject(object))
+          // Audited GLB: road and path overlap at grade +1 (y=6 m). A two-unit
+          // depth bias resolves that actual tie without moving roads or buildings.
+          if (object.userData.role === "path") {
+            for (const material of Array.isArray(object.material)
+              ? object.material
+              : [object.material]) {
+              material.polygonOffset = true
+              material.polygonOffsetFactor = 0
+              material.polygonOffsetUnits = -2
+            }
+          }
+        })
+        if (!modelBounds.isEmpty())
+          modelHeights = { min: modelBounds.min.y, max: modelBounds.max.y }
+        if (!campusBounds.isEmpty())
+          defaultPoints = [
+            { x: campusBounds.min.x, y: -campusBounds.max.z },
+            { x: campusBounds.max.x, y: -campusBounds.min.z },
+          ]
+        view = clampMapView(view, groundBounds, width / height)
         if (!manualView) fitView()
         setStatus("ready")
         invalidate()
@@ -494,9 +582,15 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       themeObserver.disconnect()
       viewport.removeEventListener("keydown", onKeyDown)
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost)
-      controls.removeEventListener("change", invalidate)
-      controls.removeEventListener("start", onInteraction)
-      controls.dispose()
+      clearPointers()
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown)
+      renderer.domElement.removeEventListener("pointermove", onPointerMove)
+      renderer.domElement.removeEventListener("pointerup", onPointerEnd)
+      renderer.domElement.removeEventListener("pointercancel", onPointerEnd)
+      renderer.domElement.removeEventListener("lostpointercapture", onPointerEnd)
+      renderer.domElement.removeEventListener("wheel", onWheel)
+      renderer.domElement.removeEventListener("contextmenu", onContextMenu)
+      window.removeEventListener("blur", clearPointers)
       disposeObject(scene)
       renderer.dispose()
       renderer.forceContextLoss()
@@ -528,28 +622,35 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
           <div className={styles.markers} ref={markerLayerRef} aria-hidden="true" />
         </div>
         {status === "ready" ? (
-          <div className={styles.toolbar}>
-            <Button
-              aria-pressed={interactive}
-              onPress={() => setInteractive((active) => !active)}
-              ref={exploreButtonRef}
-              variant={interactive ? "primary" : "outline"}
-            >
-              <Hand size={16} aria-hidden="true" />
-              {interactive ? text.stopExploring : text.explore}
-            </Button>
-            <div className={styles.viewControls}>
-              <Button aria-label={text.zoomIn} onPress={() => controllerRef.current?.zoom(0.8)}>
-                <Plus size={18} aria-hidden="true" />
+          <>
+            <span className={styles.north} role="img" aria-label={text.north}>
+              <span aria-hidden="true">
+                ↑<br />N
+              </span>
+            </span>
+            <div className={styles.toolbar}>
+              <Button
+                aria-pressed={interactive}
+                onPress={() => setInteractive((active) => !active)}
+                ref={exploreButtonRef}
+                variant={interactive ? "primary" : "outline"}
+              >
+                <Hand size={16} aria-hidden="true" />
+                {interactive ? text.stopExploring : text.explore}
               </Button>
-              <Button aria-label={text.zoomOut} onPress={() => controllerRef.current?.zoom(1.25)}>
-                <Minus size={18} aria-hidden="true" />
-              </Button>
-              <Button aria-label={text.reset} onPress={() => controllerRef.current?.reset()}>
-                <Expand size={18} aria-hidden="true" />
-              </Button>
+              <div className={styles.viewControls}>
+                <Button aria-label={text.zoomIn} onPress={() => controllerRef.current?.zoom(0.8)}>
+                  <Plus size={18} aria-hidden="true" />
+                </Button>
+                <Button aria-label={text.zoomOut} onPress={() => controllerRef.current?.zoom(1.25)}>
+                  <Minus size={18} aria-hidden="true" />
+                </Button>
+                <Button aria-label={text.reset} onPress={() => controllerRef.current?.reset()}>
+                  <Expand size={18} aria-hidden="true" />
+                </Button>
+              </div>
             </div>
-          </div>
+          </>
         ) : (
           <div className={styles.message} role="status">
             <MapIcon size={30} aria-hidden="true" />

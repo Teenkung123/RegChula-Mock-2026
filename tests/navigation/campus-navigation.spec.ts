@@ -53,14 +53,14 @@ test("shows timetable route, interactive map, example toggle and responsive layo
   await expect(page.getByTestId("campus-navigation")).toContainText("Floor M")
   await expect(page.getByTestId("campus-navigation")).toContainText("Floor 2")
   await expect(page.getByTestId("campus-navigation")).toContainText("5 min between classes")
-  const explore = page.getByRole("button", { name: "Explore map", exact: true })
+  const explore = page.getByRole("button", { name: "Move map", exact: true })
   await expect(explore).toBeEnabled({ timeout: 45000 })
   await explore.click()
-  await expect(page.getByRole("button", { name: "Done exploring" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Done" })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(explore).toBeFocused()
   await page.getByRole("button", { name: "Zoom in", exact: true }).click()
-  await page.getByRole("button", { name: "Fit route / reset view" }).click()
+  await page.getByRole("button", { name: "Show route" }).click()
   await page.getByRole("button", { name: "Try MHMK M01 → TAB220" }).click()
   await expect(page.getByText("Example route · not your timetable")).toBeVisible()
   await page.getByRole("button", { name: "Back to my classes" }).click()
@@ -78,7 +78,9 @@ test("keeps known overlap visible for unresolved building and handles empty sche
   ])
   await page.goto("/navigation")
   await expect(page.getByTestId("campus-navigation")).toContainText("Classes overlap by 20 min")
-  await expect(page.getByTestId("campus-navigation")).toContainText("no verified map match")
+  await expect(page.getByTestId("campus-navigation")).toContainText(
+    "We have not mapped this building",
+  )
   await expect(page.getByTestId("campus-navigation")).not.toContainText("~3 min")
   await mockSession(page, [])
   await page.reload()
@@ -89,12 +91,12 @@ test("model failure preserves route summary and allows retry", async ({ page }) 
   await page.route("**/campus/*.glb", (route) => route.abort())
   await page.goto("/navigation")
   await expect(
-    page.getByText("The 3D map is unavailable. Route details are still shown on this page."),
+    page.getByText("The map could not be loaded. You can still view your route details."),
   ).toBeVisible()
   await expect(page.getByTestId("campus-navigation")).toContainText("192 m")
   await page.unroute("**/campus/*.glb")
   await page.getByRole("button", { name: "Retry map", exact: true }).click()
-  await expect(page.getByRole("button", { name: "Explore map", exact: true })).toBeEnabled({
+  await expect(page.getByRole("button", { name: "Move map", exact: true })).toBeEnabled({
     timeout: 45000,
   })
 })

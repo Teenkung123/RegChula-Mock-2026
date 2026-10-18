@@ -108,8 +108,18 @@ describe("navigation page", () => {
     expect(screen.getByText("192 m")).toBeVisible()
     expect(screen.getByText("Floor M")).toBeVisible()
     expect(screen.getByText("Floor 2")).toBeVisible()
+    expect(screen.getByText("10:00")).toBeVisible()
+    expect(screen.getByText("10:01")).toBeVisible()
     expect(screen.getByText("Allow more time to reach the next class.")).toBeVisible()
-    expect(screen.getByText("Building match: OSM code")).toBeVisible()
+    expect(screen.queryByText(/location matched to public map records/)).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "About this route" }))
+    expect(screen.getByText(/location matched to public map records/)).toBeVisible()
+    expect(screen.getByRole("button", { name: "About this route" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    )
+    fireEvent.click(screen.getByRole("button", { name: "About this route" }))
+    expect(screen.queryByText(/location matched to public map records/)).toBeNull()
     expect(screen.getByText("Includes steps")).toBeVisible()
   })
   it("marks example mode and returns to actual schedule without persisting synthetic data", async () => {
@@ -128,7 +138,7 @@ describe("navigation page", () => {
     })
     mount()
     expect(await screen.findByText("Classes overlap by 20 min")).toBeVisible()
-    expect(await screen.findByText(/no verified map match/)).toBeVisible()
+    expect(await screen.findByText(/We have not mapped this building/)).toBeVisible()
     expect(screen.queryByText("~3 min")).toBeNull()
   })
   it("shows empty state and allows a clearly labeled example", async () => {
@@ -147,7 +157,7 @@ describe("navigation page", () => {
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...campus, edges: [] }) }),
     )
     mount()
-    expect(await screen.findByText(/No connected pedestrian route/)).toBeVisible()
+    expect(await screen.findByText(/A walking route is not available/)).toBeVisible()
     expect(screen.queryByText("192 m")).toBeNull()
   })
   it("shows separate retry states for schedule and map data failures", async () => {

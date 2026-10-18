@@ -3,6 +3,8 @@ import {
   ArrowDown,
   ArrowRight,
   Clock3,
+  ChevronDown,
+  Info,
   Footprints,
   MapPin,
   Route,
@@ -51,6 +53,7 @@ export function NavigationPage() {
   const [selectedId, setSelectedId] = useState("")
   const [day, setDay] = useState("all")
   const [example, setExample] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
   const transitions = useMemo(
     () => classTransitions(schedule.data?.registrations ?? []),
     [schedule.data],
@@ -115,17 +118,18 @@ export function NavigationPage() {
       <div className={styles.stop}>
         <span className={styles.stopLetter}>{label}</span>
         <div>
+          <div className={styles.stopHeading}>
+            <span className={styles.stopCaption}>
+              {label === "A" ? tr("From", "จาก", "出发") : tr("To", "ไปยัง", "到达")}
+            </span>
+            {!example && <time>{formatClassTime(label === "A" ? stop.end : stop.start)}</time>}
+          </div>
           <strong>{stopLabel(stop)}</strong>
           <span>
             {building
               ? name(building)
               : tr("Building not yet mapped", "ยังไม่มีตำแหน่งอาคารนี้", "该建筑尚未映射")}
           </span>
-          {building?.codeConfidence !== "official_faculty_source" && building && (
-            <small>
-              {tr("Building match: OSM code", "จับคู่อาคารจากรหัส OSM", "建筑匹配：OSM 编号")}
-            </small>
-          )}
           {!example && (
             <small>
               {stop.courseCode} · {stop.name}
@@ -150,14 +154,14 @@ export function NavigationPage() {
       <header className={pageStyles.pageHeader}>
         <div className={pageStyles.headerBody}>
           <p className={pageStyles.context}>
-            {tr("CAMPUS · BETWEEN CLASSES", "ภายในมหาวิทยาลัย · ระหว่างคาบเรียน", "校园 · 课间路线")}
+            {tr("Student services", "บริการสำหรับนิสิต", "学生服务")}
           </p>
           <h1>{tr("Campus routes", "เส้นทางระหว่างอาคาร", "校园路线")}</h1>
           <p>
             {tr(
-              "Plan your walk from one class to the next.",
-              "วางแผนการเดินจากคาบหนึ่งไปยังคาบถัดไป",
-              "规划两节课之间的步行路线。",
+              "Find the building for your next class and plan your walk.",
+              "ค้นหาอาคารเรียนถัดไป และวางแผนการเดินระหว่างคาบเรียน",
+              "查找下一节课所在建筑，规划步行路线。",
             )}
           </p>
         </div>
@@ -170,7 +174,7 @@ export function NavigationPage() {
         >
           <div className={styles.sectionTitle}>
             <Route size={20} aria-hidden="true" />
-            <h2>{tr("Between your classes", "การเดินระหว่างคาบ", "课间步行")}</h2>
+            <h2>{tr("Your route", "เส้นทางของคุณ", "您的路线")}</h2>
           </div>
           {schedule.isPending ? (
             <PageLoading />
@@ -222,17 +226,6 @@ export function NavigationPage() {
               )}
             </>
           )}
-          <Button
-            variant="quiet"
-            onClick={() => setExample(!example)}
-            disabled={!campus.data}
-            aria-pressed={example}
-          >
-            {example
-              ? tr("Back to my classes", "กลับไปยังตารางของฉัน", "返回我的课程")
-              : tr("Try MHMK M01 → TAB220", "ดูตัวอย่าง MHMK M01 → TAB220", "示例 MHMK M01 → TAB220")}
-            <ArrowRight size={16} aria-hidden="true" />
-          </Button>
           {example && (
             <span className={styles.example}>
               {tr(
@@ -289,17 +282,17 @@ export function NavigationPage() {
             ) : from && to && (!origin || !destination) ? (
               <Status>
                 {tr(
-                  "This building code has no verified map match yet. No route or time estimate is available.",
-                  "ยังจับคู่รหัสอาคารนี้กับแผนที่ไม่ได้ จึงยังไม่แสดงเส้นทางหรือเวลาเดิน",
-                  "尚无法匹配该建筑编号，因此不显示路线或步行时间。",
+                  "We have not mapped this building yet. Check your building and room with the faculty.",
+                  "ยังไม่มีตำแหน่งอาคารนี้ในแผนที่ โปรดตรวจสอบอาคารและห้องกับคณะ",
+                  "该建筑尚未标注，请向院系确认建筑和教室。",
                 )}
               </Status>
             ) : from && to && !route ? (
               <Status>
                 {tr(
-                  "No connected pedestrian route is available for these access points.",
-                  "ยังไม่มีเส้นทางเดินที่เชื่อมต่อระหว่างจุดเข้าถึงนี้",
-                  "这些出入口之间没有连通的步行路线。",
+                  "A walking route is not available for these buildings yet. Please check the route on campus.",
+                  "ยังไม่มีเส้นทางเดินระหว่างอาคารนี้ โปรดตรวจสอบเส้นทางในมหาวิทยาลัย",
+                  "这些建筑之间暂没有步行路线，请在校内确认。",
                 )}
               </Status>
             ) : route ? (
@@ -312,22 +305,22 @@ export function NavigationPage() {
                         ? tr("Same point", "จุดเดียวกัน", "同一地点")
                         : `~${route.minutes} ${tr("min", "นาที", "分钟")}`}
                     </strong>
-                    <span>{tr("outdoors", "ภายนอกอาคาร", "室外")}</span>
+                    <span>{tr("walking time", "เวลาเดิน", "步行时间")}</span>
                   </div>
                   <div>
                     <MapPin size={19} aria-hidden="true" />
                     <strong>
                       {Math.round(route.distanceM)} {tr("m", "ม.", "米")}
                     </strong>
-                    <span>{tr("mapped walking path", "ตามเส้นทางเดิน", "地图步道")}</span>
+                    <span>{tr("walking distance", "ระยะทาง", "步行距离")}</span>
                   </div>
                 </div>
 
                 <p className={styles.note}>
                   {tr(
-                    "Outdoor estimate at 1.2 m/s. Add time for lifts, stairs inside buildings and finding your classroom.",
-                    "ประมาณเวลาเดินภายนอกที่ 1.2 ม./วินาที เผื่อเวลาลิฟต์ บันไดภายใน และการหาห้องเรียน",
-                    "按室外步速 1.2 米/秒估算。请另留乘梯、室内楼梯及寻找教室的时间。",
+                    "Outdoor walk. Allow extra time to reach your classroom inside the building.",
+                    "เวลาเดินภายนอกอาคาร กรุณาเผื่อเวลาเดินไปยังห้องเรียนภายในอาคาร",
+                    "室外步行时间。请另留进入建筑并找到教室的时间。",
                   )}
                 </p>
                 {(route.hasSteps || route.hasSharedRoad) && (
@@ -346,6 +339,23 @@ export function NavigationPage() {
               </>
             ) : null}
           </div>
+          <div className={styles.exampleAction}>
+            <Button
+              variant="quiet"
+              onClick={() => setExample(!example)}
+              disabled={!campus.data}
+              aria-pressed={example}
+            >
+              {example
+                ? tr("Back to my classes", "กลับไปยังตารางของฉัน", "返回我的课程")
+                : tr(
+                    "Try MHMK M01 → TAB220",
+                    "ดูตัวอย่าง MHMK M01 → TAB220",
+                    "示例 MHMK M01 → TAB220",
+                  )}
+              <ArrowRight size={16} aria-hidden="true" />
+            </Button>
+          </div>
         </section>
         <section
           className={styles.mapPanel}
@@ -356,67 +366,100 @@ export function NavigationPage() {
               <MapPin size={18} aria-hidden="true" />
               {tr("Chulalongkorn University", "จุฬาลงกรณ์มหาวิทยาลัย", "朱拉隆功大学")}
             </span>
-            <span className={styles.badge}>
-              {tr("3D route preview", "เส้นทางบนแผนที่ 3 มิติ", "3D 路线预览")}
-            </span>
+            <span className={styles.badge}>{tr("Campus map", "แผนที่มหาวิทยาลัย", "校园地图")}</span>
           </div>
           <Suspense fallback={<PageLoading />}>
             <CampusMap
               route={route?.points ?? emptyPoints}
               endpoints={endpoints}
               labels={{
-                map: tr("3D campus route map", "แผนที่เส้นทาง 3 มิติ", "3D 校园路线图"),
-                loading: tr(
-                  "Loading the campus model…",
-                  "กำลังโหลดโมเดลมหาวิทยาลัย…",
-                  "正在加载校园模型…",
-                ),
+                north: tr("North", "ทิศเหนือ", "北"),
+                map: tr("Campus walking map", "แผนที่เส้นทางเดิน", "校园步行地图"),
+                loading: tr("Loading the map…", "กำลังโหลดแผนที่…", "正在加载地图…"),
                 unavailable: tr(
-                  "The 3D map is unavailable. Route details are still shown on this page.",
-                  "แสดงแผนที่ 3 มิติไม่ได้ คุณยังดูรายละเอียดเส้นทางในหน้านี้ได้",
-                  "3D 地图不可用，仍可查看本页路线详情。",
+                  "The map could not be loaded. You can still view your route details.",
+                  "โหลดแผนที่ไม่ได้ คุณยังดูรายละเอียดเส้นทางได้",
+                  "地图未能加载，您仍可查看路线详情。",
                 ),
                 retry: tr("Retry map", "ลองโหลดแผนที่อีกครั้ง", "重试地图"),
-                explore: tr("Explore map", "สำรวจแผนที่", "探索地图"),
-                stopExploring: tr("Done exploring", "เสร็จสิ้นการสำรวจ", "结束探索"),
-                reset: tr(
-                  "Fit route / reset view",
-                  "แสดงเส้นทางทั้งหมด / คืนมุมมอง",
-                  "显示路线 / 重置视图",
-                ),
+                explore: tr("Move map", "เลื่อนแผนที่", "移动地图"),
+                stopExploring: tr("Done", "เสร็จสิ้น", "完成"),
+                reset: tr("Show route", "กลับไปที่เส้นทาง", "显示路线"),
                 zoomIn: tr("Zoom in", "ซูมเข้า", "放大"),
                 zoomOut: tr("Zoom out", "ซูมออก", "缩小"),
                 instructions: tr(
-                  "Choose Explore map to rotate and pan. Zoom buttons always work.",
-                  "เลือกสำรวจแผนที่เพื่อหมุนและเลื่อน ใช้ปุ่มซูมได้ตลอด",
-                  "选择探索地图以旋转和平移，缩放按钮随时可用。",
+                  "Select Move map to drag the map. Use + and − to zoom.",
+                  "เลือกเลื่อนแผนที่แล้วลาก ใช้ปุ่ม + และ − เพื่อซูม",
+                  "选择移动地图后拖动，使用 + 和 − 缩放。",
                 ),
                 activeInstructions: tr(
-                  "Drag to rotate; two fingers to pan. Arrow keys rotate, +/− zoom, Escape exits.",
-                  "ลากเพื่อหมุน ใช้สองนิ้วเลื่อน ปุ่มลูกศรหมุน +/− ซูม และ Escape เพื่อออก",
-                  "拖动旋转，双指平移。方向键旋转，+/− 缩放，Escape 退出。",
+                  "Drag or use arrow keys to move. Pinch or +/− to zoom. Escape finishes.",
+                  "ลากหรือใช้ปุ่มลูกศรเพื่อเลื่อน ใช้สองนิ้วหรือ +/− เพื่อซูม กด Escape เพื่อเสร็จสิ้น",
+                  "拖动或方向键移动，双指或 +/− 缩放，Escape 完成。",
                 ),
               }}
             />
           </Suspense>
           <div className={styles.mapFootnote}>
-            <p>
-              {tr(
-                "Schematic outdoor routes end at approximate access points, not verified entrances. Check gates and local signs; closures and elevations are not live or surveyed.",
-                "แนวเส้นทางภายนอกสิ้นสุดที่จุดเข้าถึงโดยประมาณ ยังไม่ยืนยันประตูทางเข้า ตรวจสอบประตูและป้ายในพื้นที่ ไม่มีข้อมูลปิดทางสดหรือระดับความสูงสำรวจ",
-                "示意室外路线终点为近似通行点，并非已核实入口。请查看现场标识；不含实时封路或实测高程。",
-              )}
-            </p>
             <span>
-              {tr(
-                "View only · no location tracking",
-                "ดูเส้นทางเท่านั้น · ไม่ติดตามตำแหน่ง",
-                "仅查看路线 · 不追踪位置",
-              )}
+              <MapPin size={14} aria-hidden="true" />
+              {tr("Approximate building access points", "จุดเข้าถึงอาคารโดยประมาณ", "近似建筑通行点")}
             </span>
+            <span>{tr("No location tracking", "ไม่ติดตามตำแหน่ง", "不追踪位置")}</span>
           </div>
         </section>
       </div>
+      <section className={styles.routeDetails}>
+        <Button
+          variant="quiet"
+          onClick={() => setShowDetails(!showDetails)}
+          aria-expanded={showDetails}
+          aria-controls="campus-route-information"
+        >
+          <Info size={16} aria-hidden="true" />
+          {tr("About this route", "ข้อมูลเส้นทาง", "路线说明")}
+          <ChevronDown size={15} aria-hidden="true" />
+        </Button>
+        {showDetails && (
+          <div id="campus-route-information" className={styles.detailContent}>
+            <p>
+              {tr(
+                "Walking times use an average outdoor pace of 1.2 m/s and exclude lifts, indoor stairs and crossing waits. Routes may change when gates are closed. Follow signs on campus.",
+                "เวลาเดินคำนวณจากความเร็วเฉลี่ยภายนอก 1.2 ม./วินาที ไม่รวมลิฟต์ บันไดภายใน และการรอข้ามถนน เส้นทางอาจเปลี่ยนเมื่อประตูปิด โปรดปฏิบัติตามป้ายในพื้นที่",
+                "按室外步速 1.2 米/秒估算，不含乘梯、室内楼梯和等候过街。大门关闭可能影响路线，请遵循现场标识。",
+              )}
+            </p>
+            <p>
+              {tr(
+                "Access points and map heights are approximate; entrances and current closures have not been verified. Floor labels do not indicate an indoor route.",
+                "จุดเข้าถึงและความสูงบนแผนที่เป็นค่าประมาณ ยังไม่ยืนยันประตูทางเข้าหรือการปิดทางล่าสุด ข้อมูลชั้นไม่ได้แสดงเส้นทางภายในอาคาร",
+                "通行点和地图高程为近似值，入口与当前封路未核实。楼层标签不代表室内路线。",
+              )}
+            </p>
+            {[origin, destination]
+              .filter((building): building is CampusBuilding =>
+                Boolean(building && building.codeConfidence !== "official_faculty_source"),
+              )
+              .filter(
+                (building, index, list) =>
+                  list.findIndex((entry) => entry.code === building.code) === index,
+              )
+              .map((building) => (
+                <p key={building.code}>
+                  {building.code}:{" "}
+                  {tr(
+                    "location matched to public map records; not independently surveyed",
+                    "จับคู่ตำแหน่งจากข้อมูลแผนที่สาธารณะ ยังไม่ได้สำรวจยืนยัน",
+                    "位置匹配公共地图记录，未独立测绘核实",
+                  )}
+                </p>
+              ))}
+            <a href="https://www.bbtech.sc.chula.ac.th/building/" target="_blank" rel="noreferrer">
+              {tr("MHMK / TAB room reference", "ข้อมูลห้อง MHMK / TAB", "MHMK / TAB 教室资料")}
+            </a>
+          </div>
+        )}
+      </section>
       <footer className={styles.attribution}>
         ©{" "}
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
@@ -429,14 +472,7 @@ export function NavigationPage() {
           rel="noreferrer"
         >
           Google Open Buildings (CC BY 4.0)
-        </a>{" "}
-        ·{" "}
-        <a href="https://www.bbtech.sc.chula.ac.th/building/" target="_blank" rel="noreferrer">
-          {tr("MHMK / TAB room reference", "ข้อมูลห้อง MHMK / TAB", "MHMK / TAB 教室资料")}
         </a>
-        {origin?.codeConfidence !== "official_faculty_source" && origin
-          ? ` · ${tr("Building match: OSM code", "จับคู่อาคารจากรหัส OSM", "建筑匹配：OSM 编号")}`
-          : ""}
       </footer>
     </div>
   )
