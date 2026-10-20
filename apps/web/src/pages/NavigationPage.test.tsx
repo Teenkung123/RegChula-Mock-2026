@@ -1,9 +1,9 @@
+import type { RegistrationDto } from "@regchula/api/public-types"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NavigationPage } from "./NavigationPage"
-import type { RegistrationDto } from "@regchula/api/public-types"
 
 const { scheduleMock } = vi.hoisted(() => ({ scheduleMock: vi.fn() }))
 vi.mock("../lib/api", () => ({ getSchedule: scheduleMock }))
@@ -102,15 +102,18 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 describe("navigation page", () => {
-  it("shows timetable-linked distance, outdoor estimate, floors and short-gap warning", async () => {
+  it("adds an early-finish walking allowance without changing scheduled times", async () => {
     mount()
     expect(await screen.findByText("~3 min")).toBeVisible()
     expect(screen.getByText("192 m")).toBeVisible()
     expect(screen.getByText("Floor M")).toBeVisible()
     expect(screen.getByText("Floor 2")).toBeVisible()
-    expect(screen.getByText("10:00")).toBeVisible()
+    expect(screen.getByText("~09:50")).toBeVisible()
+    expect(screen.getByText("Scheduled end 10:00")).toBeVisible()
     expect(screen.getByText("10:01")).toBeVisible()
-    expect(screen.getByText("Allow more time to reach the next class.")).toBeVisible()
+    expect(screen.getByText("About 11 min for walking")).toBeVisible()
+    expect(screen.getByText("Assumes class ends 10 min early.")).toBeVisible()
+    expect(screen.queryByText("Allow more time to reach the next class.")).toBeNull()
     expect(screen.queryByText(/location matched to public map records/)).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "About this route" }))
     expect(screen.getByText(/location matched to public map records/)).toBeVisible()
@@ -120,17 +123,39 @@ describe("navigation page", () => {
     )
     fireEvent.click(screen.getByRole("button", { name: "About this route" }))
     expect(screen.queryByText(/location matched to public map records/)).toBeNull()
-    expect(screen.getByText("Includes steps")).toBeVisible()
+    expect(screen.queryByText("Includes steps")).toBeNull()
+    expect(screen.queryByText("Shared low-speed roads")).toBeNull()
   })
   it("marks example mode and returns to actual schedule without persisting synthetic data", async () => {
     mount()
     await screen.findByText("~3 min")
     fireEvent.click(screen.getByRole("button", { name: "Try MHMK M01 → TAB220" }))
     expect(screen.getByText("Example route · not your timetable")).toBeVisible()
-    expect(screen.queryByText("1 min between classes")).toBeNull()
+    expect(screen.queryByText("About 11 min for walking")).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Back to my classes" }))
     expect(screen.queryByText("Example route · not your timetable")).toBeNull()
-    expect(screen.getByText("1 min between classes")).toBeVisible()
+    expect(screen.getByText("About 11 min for walking")).toBeVisible()
+  })
+  it("allows ten walking minutes for back-to-back classes", async () => {
+    scheduleMock.mockResolvedValue({
+      registrations: [row(1, "MHMK", "M01", 540, 600), row(2, "TAB", "220", 600, 660)],
+    })
+    mount()
+    expect(await screen.findByText("About 10 min for walking")).toBeVisible()
+    expect(screen.queryByText("Allow more time to reach the next class.")).toBeNull()
+  })
+  it("warns when the walk exceeds the allowance including an early finish", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...campus, edges: [{ ...campus.edges[0], lengthM: 900 }] }),
+      }),
+    )
+    mount()
+    expect(await screen.findByText("~13 min")).toBeVisible()
+    expect(screen.getByText("About 11 min for walking")).toBeVisible()
+    expect(screen.getByText("Allow more time to reach the next class.")).toBeVisible()
   })
   it("preserves overlap when unknown building prevents a route", async () => {
     scheduleMock.mockResolvedValue({

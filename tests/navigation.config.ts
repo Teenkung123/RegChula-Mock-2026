@@ -5,7 +5,7 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   workers: 1,
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173",
     launchOptions: {
       ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
       args: ["--no-sandbox", "--enable-unsafe-swiftshader"],

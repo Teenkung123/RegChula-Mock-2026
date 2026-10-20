@@ -2,21 +2,24 @@ import { useQuery } from "@tanstack/react-query"
 import {
   ArrowDown,
   ArrowRight,
-  Clock3,
   ChevronDown,
-  Info,
+  Clock3,
   Footprints,
+  Info,
   MapPin,
   Route,
   TriangleAlert,
 } from "lucide-react"
 import { lazy, Suspense, useMemo, useState } from "react"
-import { useI18n } from "../i18n"
-import { Button, SelectField, Status } from "../components/ui"
-import { PlanViewTabs } from "../components/PlanViewTabs"
 import { PageLoading } from "../components/PageLoading"
+import { PlanViewTabs } from "../components/PlanViewTabs"
+import { Button, SelectField, Status } from "../components/ui"
+import { useI18n } from "../i18n"
 import { getSchedule } from "../lib/api"
 import {
+  type CampusBuilding,
+  type CampusData,
+  type ClassStop,
   campusDays,
   classTransitions,
   formatClassTime,
@@ -24,12 +27,9 @@ import {
   resolveBuilding,
   roomFloor,
   walkingRoute,
-  type CampusBuilding,
-  type CampusData,
-  type ClassStop,
 } from "../lib/campus-navigation"
-import pageStyles from "./pages.module.css"
 import styles from "./Navigation.module.css"
+import pageStyles from "./pages.module.css"
 
 const CampusMap = lazy(() =>
   import("../components/CampusMap").then((module) => ({ default: module.CampusMap })),
@@ -64,6 +64,17 @@ export function NavigationPage() {
   )
   const selected = visible.find((item) => item.id === selectedId) ?? visible[0]
   const graph = useMemo(() => (campus.data ? makeCampusGraph(campus.data) : null), [campus.data])
+  const buildingLabels = useMemo(
+    () =>
+      (campus.data?.buildings ?? []).map((building) => ({
+        id: building.footprintId ?? `code:${building.code}`,
+        code: building.code,
+        label: language === "th" ? building.nameTh || building.name : building.name,
+        x: building.x,
+        y: building.y,
+      })),
+    [campus.data, language],
+  )
   const sampleFrom: ClassStop = {
     id: "sample-from",
     courseCode: "",
@@ -90,11 +101,9 @@ export function NavigationPage() {
   )
   const endpoints = useMemo(() => {
     if (!graph || !origin || !destination) return []
-    return [origin, destination].flatMap((building, index) => {
+    return [origin, destination].flatMap((building) => {
       const point = graph.nodes.get(building.accessNodeId)
-      return point
-        ? [{ x: point.x, y: point.y, label: `${index === 0 ? "A" : "B"} · ${building.code}` }]
-        : []
+      return point ? [{ x: point.x, y: point.y, label: building.code }] : []
     })
   }, [graph, origin, destination])
   const dayName = (code: string) =>
@@ -116,13 +125,23 @@ export function NavigationPage() {
     const floor = building ? roomFloor(building, stop.room) : null
     return (
       <div className={styles.stop}>
-        <span className={styles.stopLetter}>{label}</span>
+        <span
+          className={`${styles.stopLetter} ${label === "A" ? styles.origin : styles.destination}`}
+        >
+          {label}
+        </span>
         <div>
           <div className={styles.stopHeading}>
             <span className={styles.stopCaption}>
               {label === "A" ? tr("From", "จาก", "出发") : tr("To", "ไปยัง", "到达")}
             </span>
-            {!example && <time>{formatClassTime(label === "A" ? stop.end : stop.start)}</time>}
+            {!example && (
+              <time>
+                {label === "A" && selected
+                  ? `~${formatClassTime(selected.departureMinute)}`
+                  : formatClassTime(stop.start)}
+              </time>
+            )}
           </div>
           <strong>{stopLabel(stop)}</strong>
           <span>
@@ -133,6 +152,11 @@ export function NavigationPage() {
           {!example && (
             <small>
               {stop.courseCode} · {stop.name}
+            </small>
+          )}
+          {!example && label === "A" && (
+            <small>
+              {tr("Scheduled end", "เลิกตามตาราง", "计划下课")} {formatClassTime(stop.end)}
             </small>
           )}
           {floor && (
@@ -147,7 +171,7 @@ export function NavigationPage() {
       </div>
     )
   }
-  const insufficient = !example && selected && route && selected.gapMinutes < route.minutes
+  const insufficient = !example && selected && route && selected.walkingMinutes < route.minutes
 
   return (
     <div className={pageStyles.page} data-testid="campus-navigation">
@@ -243,29 +267,48 @@ export function NavigationPage() {
             </div>
           )}
           {!example && selected && (
-            <p className={insufficient ? styles.warning : styles.gap}>
-              <Clock3 size={17} aria-hidden="true" />
-              {selected.gapMinutes < 0
-                ? tr(
+            <div className={styles.walkingWindow}>
+              <p className={insufficient ? styles.warning : styles.gap}>
+                <Clock3 size={17} aria-hidden="true" />
+                {selected.walkingMinutes > 0
+                  ? tr(
+                      `About ${selected.walkingMinutes} min for walking`,
+                      `มีเวลาเดินประมาณ ${selected.walkingMinutes} นาที`,
+                      `约有 ${selected.walkingMinutes} 分钟步行时间`,
+                    )
+                  : tr(
+                      "No walking time between these classes",
+                      "ไม่มีเวลาเดินระหว่างคาบนี้",
+                      "这些课程之间没有步行时间",
+                    )}
+                {insufficient && (
+                  <span>
+                    {tr(
+                      "Allow more time to reach the next class.",
+                      "เวลาอาจไม่พอสำหรับการเดินไปคาบถัดไป",
+                      "步行时间可能不足。",
+                    )}
+                  </span>
+                )}
+              </p>
+              <p className={styles.allowance}>
+                {tr(
+                  `Assumes class ends ${selected.from.end - selected.departureMinute} min early.`,
+                  `เผื่อเลิกเรียนก่อนเวลา ${selected.from.end - selected.departureMinute} นาที`,
+                  `按提前 ${selected.from.end - selected.departureMinute} 分钟下课估算。`,
+                )}
+              </p>
+              {selected.gapMinutes < 0 && (
+                <p className={styles.warning}>
+                  <TriangleAlert size={17} aria-hidden="true" />
+                  {tr(
                     `Classes overlap by ${Math.abs(selected.gapMinutes)} min`,
                     `คาบเรียนทับซ้อน ${Math.abs(selected.gapMinutes)} นาที`,
                     `课程重叠 ${Math.abs(selected.gapMinutes)} 分钟`,
-                  )
-                : tr(
-                    `${selected.gapMinutes} min between classes`,
-                    `มีเวลา ${selected.gapMinutes} นาทีระหว่างคาบ`,
-                    `课间 ${selected.gapMinutes} 分钟`,
                   )}
-              {insufficient && (
-                <span>
-                  {tr(
-                    "Allow more time to reach the next class.",
-                    "เวลาอาจไม่พอสำหรับการเดินไปคาบถัดไป",
-                    "步行时间可能不足。",
-                  )}
-                </span>
+                </p>
               )}
-            </p>
+            </div>
           )}
           <div aria-live="polite" aria-atomic="true">
             {campus.isError ? (
@@ -323,19 +366,6 @@ export function NavigationPage() {
                     "室外步行时间。请另留进入建筑并找到教室的时间。",
                   )}
                 </p>
-                {(route.hasSteps || route.hasSharedRoad) && (
-                  <p className={styles.warning}>
-                    <TriangleAlert size={17} aria-hidden="true" />
-                    {[
-                      route.hasSteps ? tr("Includes steps", "มีบันไดในเส้นทาง", "包含台阶") : "",
-                      route.hasSharedRoad
-                        ? tr("Shared low-speed roads", "บางช่วงใช้ถนนร่วมกับรถ", "部分路段与车辆共用")
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                )}
               </>
             ) : null}
           </div>
@@ -372,6 +402,8 @@ export function NavigationPage() {
             <CampusMap
               route={route?.points ?? emptyPoints}
               endpoints={endpoints}
+              buildings={buildingLabels}
+              language={language}
               labels={{
                 north: tr("North", "ทิศเหนือ", "北"),
                 map: tr("Campus walking map", "แผนที่เส้นทางเดิน", "校园步行地图"),
@@ -382,20 +414,17 @@ export function NavigationPage() {
                   "地图未能加载，您仍可查看路线详情。",
                 ),
                 retry: tr("Retry map", "ลองโหลดแผนที่อีกครั้ง", "重试地图"),
-                explore: tr("Move map", "เลื่อนแผนที่", "移动地图"),
-                stopExploring: tr("Done", "เสร็จสิ้น", "完成"),
+                origin: tr("From", "จาก", "出发"),
+                destination: tr("To", "ไปยัง", "到达"),
+                buildings: tr("Building names", "ชื่ออาคาร", "建筑名称"),
+                occlusion: tr("Buildings hide the route", "ให้ตึกบังเส้นทาง", "建筑遮挡路线"),
                 reset: tr("Show route", "กลับไปที่เส้นทาง", "显示路线"),
                 zoomIn: tr("Zoom in", "ซูมเข้า", "放大"),
                 zoomOut: tr("Zoom out", "ซูมออก", "缩小"),
                 instructions: tr(
-                  "Select Move map to drag the map. Use + and − to zoom.",
-                  "เลือกเลื่อนแผนที่แล้วลาก ใช้ปุ่ม + และ − เพื่อซูม",
-                  "选择移动地图后拖动，使用 + 和 − 缩放。",
-                ),
-                activeInstructions: tr(
-                  "Drag or use arrow keys to move. Pinch or +/− to zoom. Escape finishes.",
-                  "ลากหรือใช้ปุ่มลูกศรเพื่อเลื่อน ใช้สองนิ้วหรือ +/− เพื่อซูม กด Escape เพื่อเสร็จสิ้น",
-                  "拖动或方向键移动，双指或 +/− 缩放，Escape 完成。",
+                  "Drag to move. Pinch or +/− to zoom. Use arrow keys when the map is focused.",
+                  "ลากเพื่อเลื่อน ใช้สองนิ้วหรือ +/− เพื่อซูม ใช้ปุ่มลูกศรเมื่อโฟกัสแผนที่",
+                  "拖动移动，双指或 +/− 缩放。聚焦地图后可使用方向键。",
                 ),
               }}
             />

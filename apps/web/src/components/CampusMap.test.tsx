@@ -3,6 +3,8 @@ import type { ButtonHTMLAttributes, ReactNode } from "react"
 import {
   BoxGeometry,
   Group,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   type PerspectiveCamera,
@@ -109,7 +111,10 @@ afterEach(() => {
 describe("campus map lifecycle and controls", () => {
   it("supports drag, pinch, wheel and resize without tilting or exposing ground edges", async () => {
     render(<CampusMap route={[{ x: 0, y: 0 }]} endpoints={[]} />)
-    fireEvent.click(await screen.findByRole("button", { name: "Move map" }))
+    await screen.findByRole("button", { name: "Zoom in" })
+    expect(screen.queryByRole("button", { name: "Move map" })).toBeNull()
+    expect(screen.getByRole("application")).toHaveAttribute("tabindex", "0")
+    expect(screen.getByRole("application")).not.toHaveFocus()
     const canvas = document.querySelector("canvas")
     if (!canvas) throw new Error("Canvas was not mounted")
     const pointer = (type: string, id: number, x: number, y: number) => {
@@ -163,9 +168,9 @@ describe("campus map lifecycle and controls", () => {
         endpoints={[]}
       />,
     )
-    await screen.findByRole("button", { name: "Move map" })
-    fireEvent.click(screen.getByRole("button", { name: "Move map" }))
+    await screen.findByRole("button", { name: "Zoom in" })
     const viewport = screen.getByRole("application")
+    viewport.focus()
     fireEvent.keyDown(viewport, { key: "ArrowLeft" })
     fireEvent.keyDown(viewport, { key: "ArrowUp" })
     fireEvent.keyDown(viewport, { key: "+" })
@@ -178,9 +183,157 @@ describe("campus map lifecycle and controls", () => {
       expect(camera.rotation.z).toBeCloseTo(0, 14)
     }
     fireEvent.keyDown(viewport, { key: "Escape" })
-    expect(screen.getByRole("button", { name: "Move map" })).toHaveFocus()
-    expect(document.querySelector("canvas")?.style.touchAction).toBe("pan-y pinch-zoom")
+    expect(viewport).toHaveFocus()
+    expect(document.querySelector("canvas")?.style.touchAction).toBe("none")
+    expect(viewport).toHaveAttribute("tabindex", "0")
   })
+
+  it("renders directional chevrons and distinct endpoints with optional building occlusion", async () => {
+    const endpoints = [
+      { x: 0, y: 0, label: "Engineering" },
+      { x: 0, y: 150, label: "Library" },
+    ]
+    const route = endpoints.map(({ x, y }) => ({ x, y }))
+    const { rerender } = render(<CampusMap route={route} endpoints={endpoints} />)
+    await screen.findByRole("button", { name: "Zoom in" })
+    await waitFor(() => expect(mocks.render).toHaveBeenCalled())
+    const scene = mocks.render.mock.lastCall?.[0] as Scene
+    let direction: InstancedMesh | undefined
+    scene.traverse((object) => {
+      if (object instanceof InstancedMesh && object.userData.role === "route_direction")
+        direction = object
+    })
+    expect(direction).toBeDefined()
+    if (!direction) throw new Error("Route arrows were not created")
+    expect(direction.count).toBeGreaterThan(0)
+    const matrix = new Matrix4()
+    direction.getMatrixAt(0, matrix)
+    const tail = new Vector3(0, 0, -4).applyMatrix4(matrix)
+    const tip = new Vector3(0, 0, 8).applyMatrix4(matrix)
+    expect(tip.z).toBeLessThan(tail.z)
+    expect(tip.y).toBeCloseTo(8.7)
+    expect((direction.material as MeshBasicMaterial).depthTest).toBe(false)
+    expect(screen.getByText("Origin: Engineering", { selector: "li > span" })).toBeInTheDocument()
+    expect(screen.getByText("Destination: Library", { selector: "li > span" })).toBeInTheDocument()
+    expect(document.querySelector('[data-endpoint="origin"]')?.textContent).toContain("A")
+    expect(document.querySelector('[data-endpoint="destination"]')?.textContent).toContain("B")
+    const setting = screen.getByRole("switch", { name: "Buildings hide the route" })
+    expect(setting).not.toBeChecked()
+    fireEvent.click(setting)
+    expect(setting).toBeChecked()
+    expect((direction.material as MeshBasicMaterial).depthTest).toBe(true)
+    rerender(<CampusMap route={[...route, { x: 100, y: 180 }]} endpoints={endpoints} />)
+    expect(mocks.parse).toHaveBeenCalledOnce()
+    scene.traverse((object) => {
+      if (object instanceof InstancedMesh && object.userData.role === "route_direction") {
+        expect((object.material as MeshBasicMaterial).depthTest).toBe(true)
+      }
+    })
+  })
+
+  it("keeps every arrow inside a forward-facing route segment, including near short sharp turns", async () => {
+    const route = [
+      { x: 400, y: 400 },
+      { x: 400, y: 422 },
+      { x: 404, y: 422 },
+      { x: 404, y: 492 },
+    ]
+    render(<CampusMap route={route} endpoints={[]} />)
+    await screen.findByRole("button", { name: "Zoom in" })
+    await waitFor(() => expect(mocks.render).toHaveBeenCalled())
+    const scene = mocks.render.mock.lastCall?.[0] as Scene
+    let arrows: InstancedMesh | undefined
+    let ribbon: InstancedMesh | undefined
+    scene.traverse((object) => {
+      if (!(object instanceof InstancedMesh)) return
+      if (object.userData.role === "route_direction") arrows = object
+      if (object.userData.role === "route_ribbon") ribbon = object
+    })
+    if (!arrows || !ribbon) throw new Error("Expected a route ribbon with direction cues")
+    expect(arrows.count).toBeGreaterThan(0)
+    const matrix = new Matrix4()
+    ribbon.getMatrixAt(0, matrix)
+    const halfWidth = new Vector3().setFromMatrixScale(matrix).x / 2
+    const vertices = arrows.geometry.getAttribute("position")
+    for (let index = 0; index < arrows.count; index++) {
+      arrows.getMatrixAt(index, matrix)
+      const points = Array.from({ length: vertices.count }, (_, vertex) =>
+        new Vector3().fromBufferAttribute(vertices, vertex).applyMatrix4(matrix),
+      )
+      const forward = new Vector3(0, 0, 1).transformDirection(matrix)
+      const contained = route.slice(1).some((end, segmentIndex) => {
+        const start = route[segmentIndex]
+        if (!start) return false
+        const direction = new Vector3(end.x - start.x, 0, start.y - end.y)
+        const length = direction.length()
+        direction.normalize()
+        if (forward.dot(direction) < 0.99) return false
+        return points.every((point) => {
+          const x = point.x - start.x
+          const z = point.z + start.y
+          const along = x * direction.x + z * direction.z
+          const across = Math.abs(x * direction.z - z * direction.x)
+          return along >= 0 && along <= length && across <= halfWidth
+        })
+      })
+      expect(contained).toBe(true)
+    }
+  })
+
+  it.each([328, 356])(
+    "fits initial and reset endpoints in a %spx-wide portrait viewport",
+    async (width) => {
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width)
+      vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(432)
+      const asset = model()
+      const tower = new Mesh(new BoxGeometry(25, 235, 25), new MeshBasicMaterial())
+      tower.position.set(600, 117.5, 600)
+      asset.scene.add(tower)
+      mocks.parse.mockResolvedValue(asset)
+      const endpoints = [
+        { x: 45.96, y: -298.466, label: "MHMK" },
+        { x: 22.97, y: -231.92, label: "TAB" },
+      ]
+      render(
+        <CampusMap
+          route={[
+            { x: 76.142757, y: -297.160292 },
+            { x: 11.746052, y: -208.000882 },
+          ]}
+          endpoints={endpoints}
+        />,
+      )
+      await screen.findByRole("button", { name: "Zoom in" })
+      const viewport = screen.getByRole("application")
+      const markers = [...viewport.querySelectorAll<HTMLElement>("[data-endpoint]")]
+      await waitFor(() => {
+        expect(markers).toHaveLength(2)
+        for (const marker of markers) {
+          expect(marker.hidden).toBe(false)
+          expect(Number.parseFloat(marker.style.left)).toBeGreaterThan(48)
+          expect(Number.parseFloat(marker.style.left)).toBeLessThan(width - 48)
+          expect(Number.parseFloat(marker.style.top)).toBeGreaterThan(48)
+          expect(Number.parseFloat(marker.style.top)).toBeLessThan(432 - 24)
+        }
+      })
+      const initialPositions = markers.map((marker) => [marker.style.left, marker.style.top])
+      const camera = mocks.render.mock.lastCall?.[1] as PerspectiveCamera
+      expect(camera.aspect).toBeCloseTo(width / 432)
+      viewport.focus()
+      fireEvent.keyDown(viewport, { key: "ArrowLeft" })
+      await waitFor(() => {
+        expect(markers.map((marker) => [marker.style.left, marker.style.top])).not.toEqual(
+          initialPositions,
+        )
+      })
+      fireEvent.click(screen.getByRole("button", { name: "Fit route / reset view" }))
+      await waitFor(() => {
+        expect(markers.map((marker) => [marker.style.left, marker.style.top])).toEqual(
+          initialPositions,
+        )
+      })
+    },
+  )
 
   it("biases the audited coplanar path, disposes GPU resources, aborts and disconnects on unmount", async () => {
     const asset = model()
@@ -188,7 +341,7 @@ describe("campus map lifecycle and controls", () => {
     const geometryDispose = vi.spyOn(asset.ground.geometry, "dispose")
     const pathDispose = vi.spyOn(asset.pathMaterial, "dispose")
     const { unmount } = render(<CampusMap route={[]} endpoints={[]} />)
-    await screen.findByRole("button", { name: "Move map" })
+    await screen.findByRole("button", { name: "Zoom in" })
     expect(asset.pathMaterial.polygonOffset).toBe(true)
     expect(asset.pathMaterial.polygonOffsetFactor).toBe(0)
     expect(asset.pathMaterial.polygonOffsetUnits).toBe(-2)
@@ -226,7 +379,7 @@ describe("campus map lifecycle and controls", () => {
     mocks.parse.mockRejectedValueOnce(new Error("Model unavailable"))
     const { unmount } = render(<CampusMap route={[]} endpoints={[]} />)
     fireEvent.click(await screen.findByRole("button", { name: "Try loading the map again" }))
-    await screen.findByRole("button", { name: "Move map" })
+    await screen.findByRole("button", { name: "Zoom in" })
     expect(mocks.dispose).toHaveBeenCalledOnce()
     expect(mocks.requests[0]?.aborted).toBe(true)
     expect(document.querySelectorAll("canvas")).toHaveLength(1)
@@ -240,7 +393,7 @@ describe("campus map lifecycle and controls", () => {
       { x: 50, y: 100 },
     ]
     const { rerender } = render(<CampusMap route={route} endpoints={[]} />)
-    await screen.findByRole("button", { name: "Move map" })
+    await screen.findByRole("button", { name: "Zoom in" })
     rerender(<CampusMap route={[...route, { x: 80, y: 150 }]} endpoints={[]} />)
     expect(mocks.parse).toHaveBeenCalledOnce()
     const canvas = document.querySelector("canvas")
@@ -248,7 +401,7 @@ describe("campus map lifecycle and controls", () => {
     fireEvent(canvas, new Event("webglcontextlost", { cancelable: true }))
     expect(mocks.requests[0]?.aborted).toBe(true)
     fireEvent.click(await screen.findByRole("button", { name: "Try loading the map again" }))
-    await screen.findByRole("button", { name: "Move map" })
+    await screen.findByRole("button", { name: "Zoom in" })
     expect(mocks.parse).toHaveBeenCalledTimes(2)
     expect(document.querySelectorAll("canvas")).toHaveLength(1)
     expect(route).toEqual([

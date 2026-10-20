@@ -1,12 +1,16 @@
-import { Expand, Hand, Map as MapIcon, Minus, Plus, RotateCcw } from "lucide-react"
-import { useEffect, useId, useRef, useState } from "react"
+import { Label, Switch } from "@heroui/react"
+import { Expand, Map as MapIcon, Minus, Plus, RotateCcw } from "lucide-react"
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import {
   ACESFilmicToneMapping,
   Box3,
-  type BufferGeometry,
+  BoxGeometry,
+  BufferGeometry,
   Color,
   CylinderGeometry,
   DirectionalLight,
+  DoubleSide,
+  Float32BufferAttribute,
   Group,
   HemisphereLight,
   InstancedMesh,
@@ -16,7 +20,6 @@ import {
   Object3D,
   PerspectiveCamera,
   Scene,
-  SphereGeometry,
   SRGBColorSpace,
   Texture,
   Vector3,
@@ -24,6 +27,10 @@ import {
 } from "three"
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"
 import styles from "./CampusMap.module.css"
+import {
+  type CampusMapBuildingLabel,
+  createCampusBuildingLabelLayer,
+} from "./campus-building-label-layer"
 import {
   applyNorthUpCamera,
   clampMapView,
@@ -33,6 +40,8 @@ import {
   panMapView,
   zoomMapView,
 } from "./campus-map-camera"
+import type { MapLabelRect } from "./campus-map-labels"
+import { collectCampusBuildingAnchors, softenCampusRoofs } from "./campus-model"
 import { Button } from "./ui"
 
 export interface CampusMapPoint {
@@ -47,18 +56,21 @@ export interface CampusMapLabels {
   loading: string
   unavailable: string
   retry: string
-  explore: string
-  stopExploring: string
+  occlusion: string
+  origin: string
+  destination: string
+  buildings: string
   reset: string
   zoomIn: string
   zoomOut: string
   instructions: string
-  activeInstructions: string
 }
 
 export interface CampusMapProps {
   route: readonly CampusMapPoint[]
   endpoints: readonly (CampusMapPoint & { label: string })[]
+  buildings?: readonly CampusMapBuildingLabel[]
+  language?: string
   labels?: Partial<CampusMapLabels>
   className?: string
 }
@@ -69,29 +81,38 @@ const defaultLabels: CampusMapLabels = {
   loading: "Loading the campus model…",
   unavailable: "The 3D map is unavailable. You can still use the route details on this page.",
   retry: "Try loading the map again",
-  explore: "Move map",
-  stopExploring: "Done moving",
+  occlusion: "Buildings hide the route",
+  origin: "Origin",
+  destination: "Destination",
+  buildings: "Building names",
   reset: "Fit route / reset view",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   instructions:
-    "North stays at the top. Choose Move map to drag, or use the zoom and reset buttons.",
-  activeInstructions:
-    "Drag or use arrow keys to move. Pinch or use +/− to zoom. Escape finishes moving the map.",
+    "Drag or use arrow keys to move. Pinch, scroll or use +/− to zoom. North stays at the top.",
 }
 
-type MapInput = Pick<CampusMapProps, "route" | "endpoints">
+type MapInput = Pick<CampusMapProps, "route" | "endpoints"> & {
+  originLabel: string
+  destinationLabel: string
+  buildings: readonly CampusMapBuildingLabel[]
+  language: string
+}
 type MapController = {
+  refresh: () => void
   setRoute: (input: MapInput) => void
-  setInteractive: (active: boolean) => void
+  setOcclusion: (active: boolean) => void
   reset: () => void
   zoom: (factor: number) => void
 }
 
 const modelUrl = `${import.meta.env.BASE_URL}campus/chula_detailed_v3_web.glb`
+const emptyBuildings: readonly CampusMapBuildingLabel[] = []
 const isFinitePoint = (point: CampusMapPoint) =>
   Number.isFinite(point.x) && Number.isFinite(point.y)
-const toWorld = (point: CampusMapPoint, height = 1.8) => new Vector3(point.x, height, -point.y)
+// The audited roads and paths are at grade y=6. Keep flat overlays just above them,
+// below building roofs, so the optional depth test can reveal actual obstructions.
+const toWorld = (point: CampusMapPoint, height = 8) => new Vector3(point.x, height, -point.y)
 
 /** The GLB is owned by this view, including its shared geometry / materials. */
 function disposeObject(root: Object3D) {
@@ -136,33 +157,65 @@ function tokenColor(element: HTMLElement, token: string) {
   return new Color().setRGB(red / 255, green / 255, blue / 255, SRGBColorSpace)
 }
 
-export function CampusMap({ route, endpoints, labels, className }: CampusMapProps) {
+export function CampusMap({
+  route,
+  endpoints,
+  buildings = emptyBuildings,
+  language = "en",
+  labels,
+  className,
+}: CampusMapProps) {
   const text = { ...defaultLabels, ...labels }
   const hintId = useId()
   const viewportRef = useRef<HTMLDivElement>(null)
   const markerLayerRef = useRef<HTMLDivElement>(null)
-  const exploreButtonRef = useRef<HTMLButtonElement>(null)
+  const buildingLayerRef = useRef<HTMLUListElement>(null)
   const controllerRef = useRef<MapController | null>(null)
-  const latestInput = useRef<MapInput>({ route, endpoints })
+  const latestInput = useRef<MapInput>({
+    route,
+    endpoints,
+    originLabel: text.origin,
+    destinationLabel: text.destination,
+    buildings,
+    language,
+  })
+  const latestOcclusion = useRef(false)
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading")
-  const [interactive, setInteractive] = useState(false)
+  const [occlusion, setOcclusion] = useState(false)
+
+  useLayoutEffect(() => {
+    // Model readiness mounts the controls; label placement needs their committed bounds.
+    if (status === "ready") controllerRef.current?.refresh()
+  }, [status])
 
   useEffect(() => {
-    latestInput.current = { route, endpoints }
+    latestInput.current = {
+      route,
+      endpoints,
+      originLabel: text.origin,
+      destinationLabel: text.destination,
+      buildings,
+      language,
+    }
     controllerRef.current?.setRoute(latestInput.current)
-  }, [route, endpoints])
+  }, [route, endpoints, buildings, language, text.origin, text.destination])
+
+  useEffect(() => {
+    latestOcclusion.current = occlusion
+    controllerRef.current?.setOcclusion(occlusion)
+  }, [occlusion])
 
   useEffect(() => {
     const viewportNode = viewportRef.current
     const markerLayerNode = markerLayerRef.current
-    if (!viewportNode || !markerLayerNode) return
+    const buildingLayerNode = buildingLayerRef.current
+    if (!viewportNode || !markerLayerNode || !buildingLayerNode) return
     const viewport: HTMLDivElement = viewportNode
     const markerLayer: HTMLDivElement = markerLayerNode
     // A new attempt always owns a fresh context, controls and model request.
     void attempt
     setStatus("loading")
-    setInteractive(false)
     let renderer: WebGLRenderer
     try {
       renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" })
@@ -180,6 +233,7 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
     const request = new AbortController()
     const scene = new Scene()
     const camera = new PerspectiveCamera()
+    const buildingLabels = createCampusBuildingLabelLayer(buildingLayerNode)
     let inputEnabled = false
     let groundBounds: MapBounds = { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000 }
     let modelHeights = { min: -10, max: 400 }
@@ -205,9 +259,12 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
     let routeGroup = new Group()
     scene.add(routeGroup)
     let routeMaterial: MeshBasicMaterial | null = null
-    let haloMaterial: MeshBasicMaterial | null = null
+    let markerBackingMaterial: MeshBasicMaterial | null = null
+    let originMaterial: MeshBasicMaterial | null = null
+    let arrowMaterial: MeshBasicMaterial | null = null
+    let occluded = latestOcclusion.current
     let input = latestInput.current
-    let markers: { element: HTMLElement; position: Vector3 }[] = []
+    let markers: { element: HTMLElement; position: Vector3; width: number; height: number }[] = []
     const projected = new Vector3()
 
     function render() {
@@ -219,8 +276,37 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
         renderer.render(scene, camera)
       } catch {
         contextLost = true
+        setMapInteractive(false)
         setStatus("unavailable")
         return
+      }
+      const blocked: MapLabelRect[] = []
+      const viewportBounds = viewport.getBoundingClientRect()
+      for (const control of viewport.parentElement?.querySelectorAll("[data-map-control]") ?? []) {
+        const bounds = control.getBoundingClientRect()
+        blocked.push({
+          left: bounds.left - viewportBounds.left,
+          top: bounds.top - viewportBounds.top,
+          right: bounds.right - viewportBounds.left,
+          bottom: bounds.bottom - viewportBounds.top,
+        })
+      }
+      let previous: { x: number; y: number } | undefined
+      for (const point of input.route.filter(isFinitePoint)) {
+        projected.copy(toWorld(point)).project(camera)
+        const current = {
+          x: (projected.x * 0.5 + 0.5) * width,
+          y: (-projected.y * 0.5 + 0.5) * height,
+        }
+        if (previous) {
+          blocked.push({
+            left: Math.min(previous.x, current.x) - 4,
+            top: Math.min(previous.y, current.y) - 4,
+            right: Math.max(previous.x, current.x) + 4,
+            bottom: Math.max(previous.y, current.y) + 4,
+          })
+        }
+        previous = current
       }
       for (const marker of markers) {
         projected.copy(marker.position).project(camera)
@@ -236,18 +322,43 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
         marker.element.hidden = !visible
         marker.element.style.left = `${x}px`
         marker.element.style.top = `${y}px`
+        if (visible) {
+          marker.width ||= marker.element.offsetWidth || 120
+          marker.height ||= marker.element.offsetHeight || 34
+          blocked.push(
+            {
+              left: x - marker.width / 2,
+              right: x + marker.width / 2,
+              top: y - marker.height - 8,
+              bottom: y - 8,
+            },
+            { left: x - 12, top: y - 12, right: x + 12, bottom: y + 12 },
+          )
+        }
       }
+      buildingLabels.render(camera, width, height, blocked)
     }
 
     function invalidate() {
       if (!frame && !disposed && !contextLost) frame = requestAnimationFrame(render)
     }
 
+    function refreshOverlayLayout() {
+      buildingLabels.invalidateMeasurements()
+      for (const marker of markers) {
+        marker.width = 0
+        marker.height = 0
+      }
+      invalidate()
+    }
+
     function refreshTheme() {
       renderer.setClearColor(tokenColor(viewport, "--color-paper"), 1)
-      routeMaterial?.color.copy(tokenColor(viewport, "--color-accent"))
-      haloMaterial?.color.copy(tokenColor(viewport, "--color-surface"))
-      invalidate()
+      routeMaterial?.color.copy(tokenColor(viewport, "--color-map-route"))
+      markerBackingMaterial?.color.copy(tokenColor(viewport, "--color-map-marker-outline"))
+      originMaterial?.color.copy(tokenColor(viewport, "--color-map-origin"))
+      arrowMaterial?.color.copy(tokenColor(viewport, "--color-map-route-ink"))
+      refreshOverlayLayout()
     }
 
     function fitView() {
@@ -265,17 +376,21 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       markerLayer.replaceChildren()
       markers = []
       const routePaint = new MeshBasicMaterial({
-        depthTest: false,
+        depthTest: occluded,
         depthWrite: false,
         toneMapped: false,
       })
-      const haloPaint = new MeshBasicMaterial({
-        depthTest: false,
+      const markerBacking = new MeshBasicMaterial({
+        depthTest: occluded,
         depthWrite: false,
         toneMapped: false,
       })
       routeMaterial = routePaint
-      haloMaterial = haloPaint
+      markerBackingMaterial = markerBacking
+      const originPaint = routePaint.clone()
+      originMaterial = originPaint
+      arrowMaterial = routePaint.clone()
+      arrowMaterial.side = DoubleSide
       const points = next.route.filter(isFinitePoint).map((point) => toWorld(point))
       const segments: { start: Vector3; end: Vector3 }[] = []
       for (let index = 1; index < points.length; index++) {
@@ -285,70 +400,139 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       }
       const transform = new Object3D()
       const up = new Vector3(0, 1, 0)
-      for (const [material, radius, order] of [
-        [haloPaint, 4.2, 10],
-        [routePaint, 2.5, 11],
-      ] as const) {
-        if (segments.length) {
-          const lines = new InstancedMesh(
-            new CylinderGeometry(1, 1, 1, 8),
-            material,
-            segments.length,
-          )
-          lines.renderOrder = order
-          segments.forEach(({ start, end }, index) => {
-            const direction = end.clone().sub(start)
-            transform.position.copy(start).add(end).multiplyScalar(0.5)
-            transform.quaternion.setFromUnitVectors(up, direction.clone().normalize())
-            transform.scale.set(radius, direction.length(), radius)
-            transform.updateMatrix()
-            lines.setMatrixAt(index, transform.matrix)
-          })
-          lines.computeBoundingSphere()
-          routeGroup.add(lines)
+      const halfWidth = 2
+      if (segments.length) {
+        const lines = new InstancedMesh(new BoxGeometry(1, 1, 1), routePaint, segments.length)
+        lines.userData.role = "route_ribbon"
+        lines.renderOrder = 11
+        segments.forEach(({ start, end }, index) => {
+          const direction = end.clone().sub(start)
+          transform.position.copy(start).add(end).multiplyScalar(0.5)
+          transform.quaternion.setFromAxisAngle(up, Math.atan2(direction.x, direction.z))
+          transform.scale.set(halfWidth * 2, 0.7, direction.length())
+          transform.updateMatrix()
+          lines.setMatrixAt(index, transform.matrix)
+        })
+        lines.computeBoundingSphere()
+        routeGroup.add(lines)
+      }
+      if (points.length) {
+        const joins = new InstancedMesh(
+          new CylinderGeometry(halfWidth, halfWidth, 0.7, 16),
+          routePaint,
+          points.length,
+        )
+        joins.renderOrder = 11
+        points.forEach((point, index) => {
+          transform.position.copy(point)
+          transform.quaternion.identity()
+          transform.scale.setScalar(1)
+          transform.updateMatrix()
+          joins.setMatrixAt(index, transform.matrix)
+        })
+        joins.computeBoundingSphere()
+        routeGroup.add(joins)
+      }
+      // Compact chevrons sit within a straight segment's ribbon, clear of its bends.
+      const totalLength = segments.reduce(
+        (sum, segment) => sum + segment.start.distanceTo(segment.end),
+        0,
+      )
+      const arrowCount = totalLength >= 16 ? Math.max(1, Math.floor(totalLength / 48)) : 0
+      const placements: Array<{ position: Vector3; angle: number }> = []
+      let segmentIndex = 0
+      let covered = 0
+      for (let index = 0; index < arrowCount; index++) {
+        const distance = ((index + 0.5) * totalLength) / arrowCount
+        let segment = segments[segmentIndex]
+        while (segment && covered + segment.start.distanceTo(segment.end) < distance) {
+          covered += segment.start.distanceTo(segment.end)
+          segment = segments[++segmentIndex]
         }
-        if (points.length) {
-          const joins = new InstancedMesh(new SphereGeometry(radius, 8, 6), material, points.length)
-          joins.renderOrder = order
-          points.forEach((point, index) => {
-            transform.position.copy(point)
-            transform.quaternion.identity()
-            transform.scale.setScalar(1)
-            transform.updateMatrix()
-            joins.setMatrixAt(index, transform.matrix)
-          })
-          joins.computeBoundingSphere()
-          routeGroup.add(joins)
-        }
+        if (!segment) continue
+        const direction = segment.end.clone().sub(segment.start)
+        const length = direction.length()
+        const clearance = 3.5
+        if (length < clearance * 2) continue
+        const offset = Math.max(clearance, Math.min(length - clearance, distance - covered))
+        const position = segment.start.clone().addScaledVector(direction, offset / length)
+        position.y = 8.7
+        placements.push({ position, angle: Math.atan2(direction.x, direction.z) })
+      }
+      if (placements.length) {
+        const geometry = new BufferGeometry()
+        geometry.setAttribute(
+          "position",
+          new Float32BufferAttribute(
+            [0, 0, 3, -1, 0, -2, 0, 0, -0.75, 0, 0, 3, 0, 0, -0.75, 1, 0, -2],
+            3,
+          ),
+        )
+        const arrows = new InstancedMesh(geometry, arrowMaterial, placements.length)
+        arrows.userData.role = "route_direction"
+        arrows.renderOrder = 12
+        placements.forEach(({ position, angle }, index) => {
+          transform.position.copy(position)
+          transform.quaternion.setFromAxisAngle(up, angle)
+          transform.scale.setScalar(1)
+          transform.updateMatrix()
+          arrows.setMatrixAt(index, transform.matrix)
+        })
+        arrows.computeBoundingSphere()
+        routeGroup.add(arrows)
+      } else {
+        arrowMaterial.dispose()
+        arrowMaterial = null
       }
       next.endpoints.filter(isFinitePoint).forEach((endpoint, index) => {
-        const position = toWorld(endpoint, 4)
-        const ring = new Mesh(new CylinderGeometry(9, 9, 1, 24), haloPaint)
+        const origin = index === 0
+        const position = toWorld(endpoint, 9)
+        const ring = new Mesh(
+          origin ? new CylinderGeometry(7.5, 7.5, 0.8, 24) : new BoxGeometry(15, 0.8, 15),
+          markerBacking,
+        )
         ring.position.copy(position)
         ring.renderOrder = 12
         routeGroup.add(ring)
-        const dot = new Mesh(new CylinderGeometry(6.5, 6.5, 1.5, 24), routePaint)
+        const dot = new Mesh(
+          origin ? new CylinderGeometry(6, 6, 1, 24) : new BoxGeometry(12, 1, 12),
+          origin ? originPaint : routePaint,
+        )
         dot.position.copy(position)
         dot.renderOrder = 13
         routeGroup.add(dot)
         const element = document.createElement("span")
         element.className = styles.marker ?? ""
+        element.dataset.endpoint = origin ? "origin" : "destination"
         const number = document.createElement("span")
         number.className = styles.markerNumber ?? ""
-        number.textContent = String(index + 1)
+        number.textContent = origin ? "A" : "B"
         const label = document.createElement("span")
-        label.textContent = endpoint.label
+        label.textContent = `${origin ? next.originLabel : next.destinationLabel}: ${endpoint.label}`
         element.append(number, label)
         markerLayer.append(element)
-        markers.push({ element, position: toWorld(endpoint, 12) })
+        // DOM labels remain readable location anchors even when geometry is obstructed.
+        markers.push({ element, position: toWorld(endpoint, 12), width: 0, height: 0 })
       })
+      if (!next.endpoints.some(isFinitePoint)) {
+        markerBacking.dispose()
+        markerBackingMaterial = null
+        originMaterial.dispose()
+        originMaterial = null
+      }
       // Empty overlays have no meshes to release their materials during cleanup.
       if (!routeGroup.children.length) {
         routeMaterial.dispose()
-        haloMaterial.dispose()
         routeMaterial = null
-        haloMaterial = null
+      } else if (!points.length && next.endpoints.filter(isFinitePoint).length === 1) {
+        routeMaterial.dispose()
+        routeMaterial = null
       }
+      buildingLabels.setInput(
+        next.buildings,
+        next.language,
+        next.endpoints.map((point) => point.label),
+      )
       refreshTheme()
       manualView = false
       fitView()
@@ -385,8 +569,7 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
     function onKeyDown(event: KeyboardEvent) {
       if (!inputEnabled || event.target !== viewport) return
       if (event.key === "Escape") {
-        setInteractive(false)
-        exploreButtonRef.current?.focus()
+        clearPointers()
         return
       }
       if (event.key === "+" || event.key === "=" || event.key === "-") {
@@ -419,6 +602,7 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
     function onPointerDown(event: PointerEvent) {
       if (!inputEnabled || (event.button !== 0 && event.button !== 2)) return
       event.preventDefault()
+      viewport.focus({ preventScroll: true })
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
       renderer.domElement.setPointerCapture(event.pointerId)
       gesture = currentGesture()
@@ -469,6 +653,7 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       width = Math.max(viewport.clientWidth, 1)
       height = Math.max(viewport.clientHeight, 1)
       renderer.setSize(width, height, false)
+      refreshOverlayLayout()
       if (!manualView) fitView()
       else view = clampMapView(view, groundBounds, width / height)
       invalidate()
@@ -479,7 +664,7 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       contextLost = true
       request.abort()
       setStatus("unavailable")
-      setInteractive(false)
+      setMapInteractive(false)
     }
 
     renderer.domElement.addEventListener("pointerdown", onPointerDown)
@@ -499,9 +684,23 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       attributes: true,
       attributeFilter: ["style", "class", "data-theme"],
     })
+    const onFontsLoaded = refreshOverlayLayout
+    document.fonts?.addEventListener("loadingdone", onFontsLoaded)
     controllerRef.current = {
+      refresh: refreshOverlayLayout,
       setRoute,
-      setInteractive: setMapInteractive,
+      setOcclusion: (active) => {
+        occluded = active
+        for (const material of [
+          routeMaterial,
+          markerBackingMaterial,
+          originMaterial,
+          arrowMaterial,
+        ]) {
+          if (material) material.depthTest = active
+        }
+        invalidate()
+      },
       reset: () => {
         manualView = false
         fitView()
@@ -526,6 +725,8 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
           disposeObject(gltf.scene)
           return
         }
+        softenCampusRoofs(gltf.scene, tokenColor(viewport, "--color-map-roof"))
+        buildingLabels.setModelAnchors(collectCampusBuildingAnchors(gltf.scene))
         scene.add(gltf.scene)
         // Use only the ground slab for the boundary: roads and buildings can protrude beyond it.
         const modelBounds = new Box3().setFromObject(gltf.scene)
@@ -564,6 +765,7 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
           ]
         view = clampMapView(view, groundBounds, width / height)
         if (!manualView) fitView()
+        setMapInteractive(true)
         setStatus("ready")
         invalidate()
       })
@@ -580,6 +782,7 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       controllerRef.current = null
       resizeObserver.disconnect()
       themeObserver.disconnect()
+      document.fonts?.removeEventListener("loadingdone", onFontsLoaded)
       viewport.removeEventListener("keydown", onKeyDown)
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost)
       clearPointers()
@@ -596,18 +799,15 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
       renderer.forceContextLoss()
       renderer.domElement.remove()
       markerLayer.replaceChildren()
+      buildingLabels.dispose()
     }
   }, [attempt])
-
-  useEffect(() => {
-    controllerRef.current?.setInteractive(interactive)
-    if (interactive) viewportRef.current?.focus({ preventScroll: true })
-  }, [interactive])
 
   return (
     <figure
       className={`${styles.map ?? ""} ${className ?? ""}`.trim()}
-      data-interactive={interactive}
+      data-interactive={status === "ready"}
+      data-sidebar-swipe-ignore
     >
       <div className={styles.stage}>
         <div
@@ -617,28 +817,24 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
           className={styles.viewport}
           ref={viewportRef}
           role="application"
-          tabIndex={interactive ? 0 : -1}
+          tabIndex={status === "ready" ? 0 : -1}
         >
+          <ul
+            className={styles.buildingLabels}
+            ref={buildingLayerRef}
+            aria-label={text.buildings}
+          />
           <div className={styles.markers} ref={markerLayerRef} aria-hidden="true" />
         </div>
         {status === "ready" ? (
           <>
-            <span className={styles.north} role="img" aria-label={text.north}>
+            <span className={styles.north} role="img" aria-label={text.north} data-map-control>
               <span aria-hidden="true">
                 ↑<br />N
               </span>
             </span>
             <div className={styles.toolbar}>
-              <Button
-                aria-pressed={interactive}
-                onPress={() => setInteractive((active) => !active)}
-                ref={exploreButtonRef}
-                variant={interactive ? "primary" : "outline"}
-              >
-                <Hand size={16} aria-hidden="true" />
-                {interactive ? text.stopExploring : text.explore}
-              </Button>
-              <div className={styles.viewControls}>
+              <div className={styles.viewControls} data-map-control>
                 <Button aria-label={text.zoomIn} onPress={() => controllerRef.current?.zoom(0.8)}>
                   <Plus size={18} aria-hidden="true" />
                 </Button>
@@ -667,17 +863,35 @@ export function CampusMap({ route, endpoints, labels, className }: CampusMapProp
         )}
       </div>
       <figcaption className={styles.caption}>
-        <p id={hintId}>{interactive ? text.activeInstructions : text.instructions}</p>
+        <p id={hintId}>{text.instructions}</p>
         {endpoints.length > 0 ? (
           <ol className={styles.endpointList}>
             {endpoints.map((endpoint, index) => (
-              <li key={`${endpoint.x}-${endpoint.y}-${endpoint.label}`}>
-                <span aria-hidden="true">{index + 1}</span>
-                {endpoint.label}
+              <li
+                key={`${endpoint.x}-${endpoint.y}-${endpoint.label}`}
+                data-endpoint={index === 0 ? "origin" : "destination"}
+              >
+                <span aria-hidden="true">{index === 0 ? "A" : "B"}</span>
+                <span>
+                  {index === 0 ? text.origin : text.destination}: {endpoint.label}
+                </span>
               </li>
             ))}
           </ol>
         ) : null}
+        <Switch
+          className={styles.occlusion ?? ""}
+          isSelected={occlusion}
+          onChange={setOcclusion}
+          isDisabled={status !== "ready"}
+        >
+          <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            <Label>{text.occlusion}</Label>
+          </Switch.Content>
+        </Switch>
       </figcaption>
     </figure>
   )

@@ -1,13 +1,14 @@
-import { describe, expect, it } from "vitest"
 import type { RegistrationDto } from "@regchula/api/public-types"
+import { describe, expect, it } from "vitest"
+import navigationData from "../../public/campus/navigation-data.json"
 import {
+  type CampusBuilding,
+  type CampusData,
   classTransitions,
   makeCampusGraph,
   resolveBuilding,
   roomFloor,
   walkingRoute,
-  type CampusData,
-  type CampusBuilding,
 } from "./campus-navigation"
 
 const buildings: CampusBuilding[] = [
@@ -111,11 +112,71 @@ describe("campus walking graph", () => {
   })
 })
 describe("building and floor resolution", () => {
+  it("resolves PHOTO501 to its evidenced campus footprint and an existing route from MHMK M02", () => {
+    const campus = navigationData as CampusData
+    const from = resolveBuilding(campus.buildings, "MHMK", "M02")
+    const to = resolveBuilding(campus.buildings, "PHOTO501")
+    expect(from).not.toBeNull()
+    expect(to).not.toBeNull()
+    if (!from || !to) throw new Error("Expected both evidenced classroom buildings to resolve")
+    expect(to.code).toBe("PHOTO")
+    expect(to).toMatchObject({
+      footprintId: "way/158060547",
+      accessNodeId: "10064566029",
+      accessConfidence: "nearest_mapped_path_not_verified_entrance",
+    })
+    expect(resolveBuilding(campus.buildings, "PHOTO 501")).toBe(to)
+    expect(resolveBuilding(campus.buildings, "", "PHOTO501")).toBe(to)
+    expect(resolveBuilding(campus.buildings, "PHOTO", "501")).toBe(to)
+    expect(resolveBuilding(campus.buildings, to.nameTh ?? "")).toBe(to)
+    const route = walkingRoute(makeCampusGraph(campus), from.accessNodeId, to.accessNodeId)
+    expect(route?.distanceM).toBeGreaterThan(0)
+    expect(route?.points[0]?.id).toBe(from.accessNodeId)
+    expect(route?.points.at(-1)?.id).toBe(to.accessNodeId)
+    // The outdoor location evidence does not establish a classroom floor convention.
+    expect(roomFloor(to, "501")).toBeNull()
+  })
+  it("coalesces evidenced alternate codes onto one footprint and keeps unknown codes unresolved", () => {
+    const campus = navigationData as CampusData
+    expect(resolveBuilding(campus.buildings, "SCI25")?.code).toBe("MHMK")
+    expect(resolveBuilding(campus.buildings, "BSB2")?.code).toBe("BSB")
+    expect(resolveBuilding(campus.buildings, "PRAJ7 201")?.code).toBe("PRAJ2")
+    expect(resolveBuilding(campus.buildings, "VISID")?.code).toBe("VSID3")
+    expect(resolveBuilding(campus.buildings, "UNKNOWN", "PHOTO501")).toBeNull()
+    expect(new Set(campus.buildings.map((building) => building.code)).size).toBe(
+      campus.buildings.length,
+    )
+    const nodes = new Set(campus.nodes.map((node) => node.id))
+    expect(campus.buildings.every((building) => nodes.has(building.accessNodeId))).toBe(true)
+  })
   it("resolves exact building aliases and concatenated rooms, never unknown codes", () => {
     expect(resolveBuilding(buildings, "tab", "220")?.code).toBe("TAB")
     expect(resolveBuilding(buildings, "", "TAB220")?.code).toBe("TAB")
     expect(resolveBuilding(buildings, "UNKNOWN", "TAB220")).toBeNull()
     expect(resolveBuilding(buildings, "", "TABBY")).toBeNull()
+  })
+  it("accepts combined labels and exact names without accepting trailing text", () => {
+    expect(resolveBuilding(buildings, "TAB 220")?.code).toBe("TAB")
+    expect(resolveBuilding(buildings, "MHMKM01")?.code).toBe("MHMK")
+    expect(resolveBuilding(buildings, "Mahamakut")?.code).toBe("MHMK")
+    expect(resolveBuilding(buildings, "TAB220UNKNOWN", "TAB220")).toBeNull()
+    expect(resolveBuilding(buildings, "UNKNOWN220", "TAB220")).toBeNull()
+    expect(resolveBuilding(buildings, "", "TAB220UNKNOWN")).toBeNull()
+  })
+  it("rejects ambiguous aliases, combined prefixes and names", () => {
+    const first = buildings[0]
+    if (!first) throw new Error("Expected the TAB building fixture")
+    const ambiguous = [
+      ...buildings,
+      { ...first, code: "OTHER", aliases: ["TAB"], name: "Mahamakut" },
+    ]
+    expect(resolveBuilding(ambiguous, "TAB")).toBeNull()
+    expect(resolveBuilding(ambiguous, "TAB220")).toBeNull()
+    expect(resolveBuilding(ambiguous, "", "TAB220")).toBeNull()
+    expect(resolveBuilding(ambiguous, "Mahamakut")).toBeNull()
+    expect(
+      resolveBuilding([...buildings, { ...first, code: "TAB2", aliases: [] }], "TAB220"),
+    ).toBeNull()
   })
   it("prefers official exceptional floors and bounded user convention", () => {
     expect(roomFloor(buildings[1]!, "MHMK M01")).toEqual({ floor: "M", inferred: false })
@@ -139,6 +200,22 @@ describe("timetable transitions", () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]?.from.courseCode).toBe("1")
     expect(rows[0]?.gapMinutes).toBe(60)
+    expect(rows[0]?.departureMinute).toBe(590)
+    expect(rows[0]?.walkingMinutes).toBe(70)
+  })
+  it("allows ten estimated walking minutes for adjacent classes without changing scheduled times", () => {
+    const rows = classTransitions([registration(1, 540, 600), registration(2, 600, 660)])
+    expect(rows[0]).toMatchObject({ gapMinutes: 0, departureMinute: 590, walkingMinutes: 10 })
+    expect(rows[0]?.from.end).toBe(600)
+    expect(rows[0]?.to.start).toBe(600)
+  })
+  it("caps early departure at the start of a short class", () => {
+    const rows = classTransitions([registration(1, 540, 545), registration(2, 545, 600)])
+    expect(rows[0]).toMatchObject({ gapMinutes: 0, departureMinute: 540, walkingMinutes: 5 })
+  })
+  it("retains scheduled overlaps even when an early departure provides walking time", () => {
+    const rows = classTransitions([registration(1, 540, 605), registration(2, 600, 660)])
+    expect(rows[0]).toMatchObject({ gapMinutes: -5, departureMinute: 595, walkingMinutes: 5 })
   })
   it("preserves overlapping transitions and excludes arranged, invalid and dropped classes", () => {
     const rows = classTransitions([
@@ -150,5 +227,6 @@ describe("timetable transitions", () => {
     ])
     expect(rows).toHaveLength(1)
     expect(rows[0]?.gapMinutes).toBe(-60)
+    expect(rows[0]?.walkingMinutes).toBe(-50)
   })
 })

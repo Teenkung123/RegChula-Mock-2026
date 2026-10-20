@@ -12,6 +12,7 @@ export type CampusEdge = {
 }
 export type CampusBuilding = {
   code: string
+  footprintId?: string
   aliases: string[]
   name: string
   nameTh?: string
@@ -43,7 +44,16 @@ export type ClassStop = {
   building: string
   room: string
 }
-export type ClassTransition = { id: string; from: ClassStop; to: ClassStop; gapMinutes: number }
+export type ClassTransition = {
+  id: string
+  from: ClassStop
+  to: ClassStop
+  /** Scheduled gap, retained unchanged so early departure cannot hide an overlap. */
+  gapMinutes: number
+  departureMinute: number
+  walkingMinutes: number
+}
+export const EARLY_CLASS_RELEASE_MINUTES = 10
 export const campusDays = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
 /** Consecutive meetings within the same day, including overlapping classes as warnings. */
@@ -88,7 +98,15 @@ export function classTransitions(registrations: RegistrationDto[]): ClassTransit
       const from = list[index - 1],
         to = list[index]
       if (!from || !to) continue
-      result.push({ id: `${from.id}:${to.id}`, from, to, gapMinutes: to.start - from.end })
+      const departureMinute = Math.max(from.start, from.end - EARLY_CLASS_RELEASE_MINUTES)
+      result.push({
+        id: `${from.id}:${to.id}`,
+        from,
+        to,
+        gapMinutes: to.start - from.end,
+        departureMinute,
+        walkingMinutes: to.start - departureMinute,
+      })
     }
   }
   return result
@@ -100,19 +118,20 @@ export function resolveBuilding(
   building: string,
   room = "",
 ): CampusBuilding | null {
-  const code = normalized(building)
-  // Match the separate building field exactly; never silently override an unknown building.
-  if (code) {
-    const matches = buildings.filter((candidate) =>
-      [candidate.code, ...candidate.aliases].some((alias) => normalized(alias) === code),
-    )
-    return matches.length === 1 ? (matches[0] ?? null) : null
-  }
-  const value = normalized(room)
+  // Some schedules combine a building and room in either field. An explicit unknown
+  // building still takes precedence over the separate room; do not guess its location.
+  const value = normalized(building) || normalized(room)
+  if (!value) return null
+  const labels = (candidate: CampusBuilding) =>
+    [candidate.code, ...candidate.aliases, candidate.name, candidate.nameTh ?? ""]
+      .map(normalized)
+      .filter(Boolean)
+  const exact = buildings.filter((candidate) => labels(candidate).includes(value))
+  if (exact.length) return exact.length === 1 ? (exact[0] ?? null) : null
   const matches = buildings.filter((candidate) =>
-    [candidate.code, ...candidate.aliases].some((alias) => {
-      const prefix = normalized(alias)
-      return value.startsWith(prefix) && /^\d|^M\d/.test(value.slice(prefix.length))
+    labels(candidate).some((prefix) => {
+      const suffix = value.slice(prefix.length)
+      return value.startsWith(prefix) && /^(?:M?\d{1,4})(?:\/\d{1,3})?$/.test(suffix)
     }),
   )
   return matches.length === 1 ? (matches[0] ?? null) : null

@@ -63,6 +63,18 @@
   --color-success: oklch(45% 0.12 150);
   --color-success-ink: #ffffff;
   --color-success-soft: oklch(93% 0.035 150);
+  --color-map-route: #2563eb;
+  --color-map-route-ink: #ffffff;
+  --color-map-route-text: #1d4ed8;
+  --color-map-route-soft: color-mix(in srgb, var(--color-map-route) 12%, var(--color-surface));
+  --color-map-origin: #15803d;
+  --color-map-origin-ink: #ffffff;
+  --color-map-marker-outline: #25334a;
+  --color-map-label-ink: #334155;
+  --color-map-label-surface: #ffffff;
+  --color-map-label-rule: #d6deea;
+  --color-map-label-halo: #ffffff;
+  --color-map-roof: #b8896f;
   --color-warning: oklch(52% 0.13 75);
   --color-warning-ink: #151116;
   --color-warning-soft: oklch(94% 0.04 75);
@@ -220,6 +232,7 @@
   --color-success: oklch(70% 0.1 150);
   --color-success-ink: #151116;
   --color-success-soft: oklch(24% 0.04 150);
+  --color-map-route-text: #93c5fd;
   --color-warning: oklch(76% 0.11 75);
   --color-warning-ink: #151116;
   --color-warning-soft: oklch(25% 0.045 75);

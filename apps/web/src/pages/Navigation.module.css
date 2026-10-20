@@ -39,10 +39,17 @@
   height: 30px;
   display: grid;
   place-items: center;
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
   border-radius: 50%;
   font-weight: 750;
+}
+.origin {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+.destination {
+  background: var(--color-map-route-soft);
+  color: var(--color-map-route-text);
+  border-radius: 7px;
 }
 .stop > div {
   display: grid;
@@ -98,6 +105,16 @@
 }
 .gap {
   color: var(--color-ink-2);
+}
+.walkingWindow {
+  display: grid;
+  gap: var(--space-xs);
+}
+.allowance {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-muted);
 }
 .warning {
   color: var(--color-warning);
