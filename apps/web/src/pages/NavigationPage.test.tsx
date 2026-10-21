@@ -5,15 +5,19 @@ import { MemoryRouter } from "react-router"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { NavigationPage } from "./NavigationPage"
 
-const { scheduleMock } = vi.hoisted(() => ({ scheduleMock: vi.fn() }))
+const { scheduleMock, mapPropsMock } = vi.hoisted(() => ({
+  scheduleMock: vi.fn(),
+  mapPropsMock: vi.fn(),
+}))
 vi.mock("../lib/api", () => ({ getSchedule: scheduleMock }))
 vi.mock("../i18n", () => ({
   useI18n: () => ({ language: "en", text: (value: { en: string }) => value.en }),
 }))
 vi.mock("../components/CampusMap", () => ({
-  CampusMap: ({ route }: { route: unknown[] }) => (
-    <div data-testid="mock-map">{route.length} route points</div>
-  ),
+  CampusMap: (props: { route: unknown[] }) => {
+    mapPropsMock(props)
+    return <div data-testid="mock-map">{props.route.length} route points</div>
+  },
 }))
 const campus = {
   nodes: [
@@ -184,6 +188,67 @@ describe("navigation page", () => {
     mount()
     expect(await screen.findByText(/A walking route is not available/)).toBeVisible()
     expect(screen.queryByText("192 m")).toBeNull()
+  })
+  it("keeps tunnel access uncertainty visible and passes mapped levels to the map", async () => {
+    const nodes = campus.nodes.map((node) => ({ ...node, elevationM: -3 }))
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...campus,
+          nodes,
+          edges: [{ ...campus.edges[0], tunnel: "yes", highway: "footway" }],
+        }),
+      }),
+    )
+    mount()
+    expect(
+      await screen.findByText(
+        "Uses a pedestrian tunnel. Opening hours and current access are unverified; check gates and signs on campus.",
+      ),
+    ).toBeVisible()
+    expect(screen.getByRole("button", { name: "About this route" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    )
+    await waitFor(() =>
+      expect(mapPropsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          route: nodes,
+          endpoints: [
+            { ...nodes[0], label: "MHMK" },
+            { ...nodes[1], label: "TAB" },
+          ],
+        }),
+      ),
+    )
+    expect(screen.getByText("No location tracking")).toBeVisible()
+  })
+  it("warns about unverified gate access without claiming a tunnel on a surface route", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...campus,
+          edges: [{ ...campus.edges[0], accessNoteRequired: true }],
+        }),
+      }),
+    )
+    mount()
+    expect(
+      await screen.findByText(
+        "Gate hours and current access are unverified. Check gates and signs on campus.",
+      ),
+    ).toBeVisible()
+    expect(screen.queryByText(/Uses a pedestrian tunnel/)).toBeNull()
+  })
+  it("does not add an access warning to an unflagged surface route", async () => {
+    mount()
+    await screen.findByText("~3 min")
+    expect(screen.queryByText(/Opening hours and current access are unverified/)).toBeNull()
+    expect(screen.queryByText(/Gate hours and current access are unverified/)).toBeNull()
   })
   it("shows separate retry states for schedule and map data failures", async () => {
     scheduleMock.mockRejectedValue(new Error("offline"))

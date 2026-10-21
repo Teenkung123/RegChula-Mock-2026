@@ -162,7 +162,7 @@ test("resolves PHOTO 501 from the supplied classroom example", async ({ page }, 
   const navigation = page.getByTestId("campus-navigation")
   await expect(navigation).toContainText("PHOTO 501")
   await expect(navigation).toContainText("มีเวลาเดินประมาณ 130 นาที")
-  await expect(navigation).toContainText("242 ม.")
+  await expect(navigation).toContainText("232 ม.")
   await expect(navigation).not.toContainText("ยังไม่มีตำแหน่งอาคารนี้")
   await expect(navigation).not.toContainText("มีบันไดในเส้นทาง")
   await expect(navigation).not.toContainText("บางช่วงใช้ถนนร่วมกับรถ")
@@ -287,4 +287,33 @@ test("a real mobile map swipe pans without opening the sidebar", async ({ page }
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await touch.detach()
+})
+
+test("takes the Chula Tunnel from MHMK to PINIT with an access-hours note", async ({
+  page,
+}, info) => {
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  await mockSession(page, [
+    registration(1, "MHMK", "M01", 540, 600),
+    registration(2, "PINIT", "101", 610, 660),
+  ])
+  await page.goto("/navigation")
+  const navigation = page.getByTestId("campus-navigation")
+  await expect(navigation).toContainText("441 m")
+  await expect(navigation).toContainText("~7 min")
+  await expect(navigation).toContainText("Uses a pedestrian tunnel.")
+  await expect(navigation).toContainText("Opening hours and current access are unverified")
+  const map = page.getByRole("application", { name: "Campus walking map" })
+  await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
+  await expectRouteInView(page)
+  await page.getByText("Buildings hide the route", { exact: true }).click()
+  await expect(page.getByRole("switch", { name: "Buildings hide the route" })).toBeChecked()
+  await expectRouteInView(page)
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }))
+  await page.screenshot({
+    path: `tmp/navigation-${info.project.name}-pinit-tunnel.png`,
+    fullPage: true,
+  })
+  expect(errors).toEqual([])
 })

@@ -1,4 +1,7 @@
 {
+  "scope": "Historical pre-revision-4 baseline only; current reviewed pedestrian overlay validation is in pedestrian-validation.json.",
+  "baselineCommit": "270496f12d2d1f6dcecd040e4c02fbd9e8ee2911",
+  "currentGraphValidation": "pedestrian-validation.json",
   "passed": [
     "Every edge is consecutive original OSM node pair",
     "No ground edge intersects buffered building interior except mapped building_passage",

@@ -78,6 +78,91 @@ const registration = (id: number, start: number, end: number, extras = {}): Regi
   ],
 })
 describe("campus walking graph", () => {
+  it("routes MHMK to PINIT through the documented tunnel and reviewed approaches", () => {
+    const campus = navigationData as CampusData
+    const from = resolveBuilding(campus.buildings, "MHMK")!
+    const to = resolveBuilding(campus.buildings, "PINIT")!
+    const graph = makeCampusGraph(campus)
+    const route = walkingRoute(graph, from.accessNodeId, to.accessNodeId)!
+    expect(route.distanceM).toBeCloseTo(441.049, 3)
+    expect(route.distanceM).toBeLessThan(946.561 / 2)
+    expect(route).toMatchObject({
+      hasTunnel: true,
+      hasSteps: true,
+      usesPedestrianArea: true,
+      accessNoteRequired: true,
+      minutes: 7,
+    })
+    expect(route.points.some((point) => point.elevationM === -3)).toBe(true)
+    expect(walkingRoute(graph, to.accessNodeId, from.accessNodeId)?.distanceM).toBeCloseTo(
+      route.distanceM,
+      3,
+    )
+    const tab = resolveBuilding(campus.buildings, "TAB")!
+    expect(walkingRoute(graph, from.accessNodeId, tab.accessNodeId)?.distanceM).toBeCloseTo(
+      192.227,
+      3,
+    )
+  })
+  it("never joins crossings by coordinates, including isolated source-node grades", () => {
+    const graph = makeCampusGraph({
+      ...data,
+      nodes: [
+        { id: "a", x: -1, y: 0 },
+        { id: "surface", x: 0, y: 0, elevationM: 0 },
+        { id: "surface@-1", x: 0, y: 0, elevationM: -3 },
+        { id: "c", x: 1, y: 0 },
+      ],
+      edges: [
+        { a: "a", b: "surface", lengthM: 1, highway: "footway" },
+        { a: "surface@-1", b: "c", lengthM: 1, highway: "footway", tunnel: "yes" },
+      ],
+    })
+    expect(walkingRoute(graph, "a", "c")).toBeNull()
+    expect(walkingRoute(graph, "surface", "surface@-1")).toBeNull()
+  })
+  it("preserves access and structure metadata without treating building passages as tunnels", () => {
+    const graph = makeCampusGraph({
+      ...data,
+      edges: [
+        { a: "a", b: "b", lengthM: 1, highway: "footway", tunnel: "building_passage" },
+        { a: "b", b: "c", lengthM: 1, highway: "footway", bridge: "yes", accessNoteRequired: true },
+      ],
+    })
+    expect(walkingRoute(graph, "a", "b")).toMatchObject({
+      hasTunnel: false,
+      accessNoteRequired: false,
+    })
+    expect(walkingRoute(graph, "a", "c")).toMatchObject({
+      hasBridge: true,
+      accessNoteRequired: true,
+    })
+  })
+  it("rejects non-finite coordinates and elevations before routing", () => {
+    const graph = makeCampusGraph({
+      ...data,
+      nodes: [
+        data.nodes[0]!,
+        { id: "b", x: NaN, y: 0 },
+        { id: "c", x: 2, y: 0, elevationM: Infinity },
+      ],
+    })
+    expect(walkingRoute(graph, "a", "b")).toBeNull()
+    expect(walkingRoute(graph, "a", "c")).toBeNull()
+  })
+  it("renders two-node bridges above ground without adding graph shortcuts or distance", () => {
+    const graph = makeCampusGraph({
+      ...data,
+      edges: [{ a: "a", b: "c", lengthM: 100, highway: "footway", bridge: "yes", layer: "1" }],
+    })
+    const route = walkingRoute(graph, "a", "c")!
+    expect(route.distanceM).toBe(100)
+    expect(route.hasBridge).toBe(true)
+    expect(route.points.map((point) => point.elevationM ?? 0)).toEqual([0, 5, 5, 0])
+    expect(graph.nodes.size).toBe(4)
+    expect(graph.adjacency.get("a")).toHaveLength(1)
+  })
+
   it("uses network length and round-up time, preserving stairs", () => {
     const route = walkingRoute(makeCampusGraph(data), "a", "c")!
     expect(route.distanceM).toBe(145)

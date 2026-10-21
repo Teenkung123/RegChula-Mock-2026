@@ -1,0 +1,17 @@
+{
+  "checkedDate": "2026-10-20",
+  "sources": [
+    "https://sustainability.chula.ac.th/th/report/3373/",
+    "https://healthyspaceforum.org/portfolio/cu-tunnel-revival/",
+    "https://www.arts.chula.ac.th/~tran/downloads/cu_traffic_03.pdf",
+    "https://www.psy.chula.ac.th/en/news-announcement/109th-scicu/"
+  ],
+  "scope": "Restore only four existing OSM approach segments at the documented campus tunnel gates. University and project-designer sources corroborate the connection; the university gate register names the Science pedestrian tunnel gate. Exact coordinates follow the supplied OSM snapshot. Current gate status and hours are not verified; historic hours are not used as a live access promise.",
+  "approaches": [
+    {"id":"tunnel-east-north","wayId":"836151470","nodes":["13381164616","6247187971"],"barrierIds":["1455922944"],"source":"https://www.openstreetmap.org/way/836151470","confidence":"corroborated_mapped_gate_approach","evidence":"University documents the Science pedestrian tunnel gate; mapped approach crosses the perimeter fence with no shared gate node."},
+    {"id":"tunnel-east-south","wayId":"836151471","nodes":["11144118020","7804339314"],"barrierIds":["31971887"],"source":"https://www.openstreetmap.org/way/836151471","confidence":"corroborated_mapped_gate_approach","evidence":"University documents the Science pedestrian tunnel gate; mapped approach crosses the perimeter fence with no shared gate node."},
+    {"id":"tunnel-west-north","wayId":"836151472","nodes":["7804339316","7804339317"],"barrierIds":["200671068"],"source":"https://www.openstreetmap.org/way/836151472","confidence":"corroborated_mapped_gate_approach","evidence":"University and project designer document tunnel connection between both campus halves; original mapped west approach crosses the perimeter fence without a shared gate node."},
+    {"id":"tunnel-west-south","wayId":"1204350167","nodes":["7804339319","7804339320"],"barrierIds":["200671068"],"source":"https://www.openstreetmap.org/way/1204350167","confidence":"corroborated_mapped_gate_approach","evidence":"University and project designer document tunnel connection between both campus halves; original mapped west sidewalk approach crosses the perimeter fence without a shared gate node."}
+  ]
+}
+

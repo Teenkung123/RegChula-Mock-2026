@@ -103,7 +103,7 @@ export function NavigationPage() {
     if (!graph || !origin || !destination) return []
     return [origin, destination].flatMap((building) => {
       const point = graph.nodes.get(building.accessNodeId)
-      return point ? [{ x: point.x, y: point.y, label: building.code }] : []
+      return point ? [{ ...point, label: building.code }] : []
     })
   }, [graph, origin, destination])
   const dayName = (code: string) =>
@@ -359,11 +359,26 @@ export function NavigationPage() {
                   </div>
                 </div>
 
+                {route.accessNoteRequired && (
+                  <p className={styles.note}>
+                    {route.hasTunnel
+                      ? tr(
+                          "Uses a pedestrian tunnel. Opening hours and current access are unverified; check gates and signs on campus.",
+                          "เส้นทางผ่านอุโมงค์คนเดิน ยังไม่ยืนยันเวลาเปิดและการเข้าใช้ปัจจุบัน โปรดตรวจสอบประตูและป้ายในพื้นที่",
+                          "路线经过人行隧道。开放时间与当前通行情况未核实，请查看校内大门和标识。",
+                        )
+                      : tr(
+                          "Gate hours and current access are unverified. Check gates and signs on campus.",
+                          "ยังไม่ยืนยันเวลาเปิดประตูและการเข้าใช้ปัจจุบัน โปรดตรวจสอบประตูและป้ายในพื้นที่",
+                          "大门开放时间与当前通行情况未核实，请查看校内大门和标识。",
+                        )}
+                  </p>
+                )}
                 <p className={styles.note}>
                   {tr(
-                    "Outdoor walk. Allow extra time to reach your classroom inside the building.",
-                    "เวลาเดินภายนอกอาคาร กรุณาเผื่อเวลาเดินไปยังห้องเรียนภายในอาคาร",
-                    "室外步行时间。请另留进入建筑并找到教室的时间。",
+                    "Between-building walk. Allow extra time to reach your classroom inside the building.",
+                    "เวลาเดินระหว่างอาคาร กรุณาเผื่อเวลาเดินไปยังห้องเรียนภายในอาคาร",
+                    "建筑间步行时间。请另留进入建筑并找到教室的时间。",
                   )}
                 </p>
               </>

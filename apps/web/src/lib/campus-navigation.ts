@@ -1,6 +1,12 @@
 import type { MeetingDto, RegistrationDto } from "@regchula/api/public-types"
 
-export type CampusNode = { id: string; x: number; y: number }
+export type CampusNode = {
+  id: string
+  x: number
+  y: number
+  /** Schematic structure height, not a surveyed elevation or classroom floor. */
+  elevationM?: number
+}
 export type CampusEdge = {
   a: string
   b: string
@@ -9,6 +15,13 @@ export type CampusEdge = {
   oneway?: string
   crossing?: boolean
   sharedRoad?: boolean
+  wayId?: string
+  layer?: string
+  bridge?: string
+  tunnel?: string
+  hasSteps?: boolean
+  pedestrianArea?: boolean
+  accessNoteRequired?: boolean
 }
 export type CampusBuilding = {
   code: string
@@ -167,13 +180,26 @@ export type CampusRoute = {
   hasSteps: boolean
   hasSharedRoad: boolean
   crossingCount: number
+  hasTunnel: boolean
+  hasBridge: boolean
+  usesPedestrianArea: boolean
+  accessNoteRequired: boolean
 }
 export type CampusGraph = {
   nodes: Map<string, CampusNode>
   adjacency: Map<string, Array<{ to: string; edge: CampusEdge }>>
 }
 export function makeCampusGraph(data: CampusData): CampusGraph {
-  const nodes = new Map(data.nodes.map((node) => [node.id, node]))
+  const nodes = new Map(
+    data.nodes
+      .filter(
+        (node) =>
+          Number.isFinite(node.x) &&
+          Number.isFinite(node.y) &&
+          (node.elevationM === undefined || Number.isFinite(node.elevationM)),
+      )
+      .map((node) => [node.id, node]),
+  )
   const adjacency: CampusGraph["adjacency"] = new Map()
   const add = (from: string, to: string, edge: CampusEdge) => {
     const list = adjacency.get(from) ?? []
@@ -189,12 +215,14 @@ export function makeCampusGraph(data: CampusData): CampusGraph {
     )
       continue
     if (edge.oneway !== "-1") add(edge.a, edge.b, edge)
-    if (edge.oneway !== "yes" && edge.oneway !== "1") add(edge.b, edge.a, edge)
+    if (!["yes", "1", "true"].includes(edge.oneway ?? "")) add(edge.b, edge.a, edge)
   }
   return { nodes, adjacency }
 }
 
-/** Dijkstra on the filtered pedestrian topology. No straight-line fallback or inferred connectors. */
+/** Dijkstra on the audited topology, including explicit pedestrian-area edges.
+ * Never snap nearby points, join geometric crossings, or fall back to a straight line.
+ */
 export function walkingRoute(graph: CampusGraph, from: string, to: string): CampusRoute | null {
   if (!graph.nodes.has(from) || !graph.nodes.has(to)) return null
   const distance = new Map<string, number>([[from, 0]])
@@ -262,14 +290,54 @@ export function walkingRoute(graph: CampusGraph, from: string, to: string): Camp
     cursor = step.node
     points.push(point)
   }
+  points.reverse()
+  edges.reverse()
   return {
-    points: points.reverse(),
+    points: routeDisplayPoints(points, edges),
     distanceM,
     minutes: Math.ceil(distanceM / 72),
-    hasSteps: edges.some((edge) => edge.highway === "steps"),
+    hasSteps: edges.some((edge) => edge.hasSteps || edge.highway === "steps"),
     hasSharedRoad: edges.some((edge) => edge.sharedRoad),
     crossingCount: edges.filter((edge) => edge.crossing).length,
+    hasTunnel: edges.some((edge) => isTunnel(edge)),
+    hasBridge: edges.some((edge) => !!edge.bridge && edge.bridge !== "no"),
+    usesPedestrianArea: edges.some((edge) => edge.pedestrianArea),
+    accessNoteRequired: edges.some((edge) => edge.accessNoteRequired || isTunnel(edge)),
   }
+}
+
+const isTunnel = (edge: CampusEdge) =>
+  !!edge.tunnel && !["no", "building_passage"].includes(edge.tunnel)
+
+/** Display-only shoulders keep a two-node bridge/underpass visibly separated
+ * when both mapped endpoints meet ground paths. These are schematic ramps,
+ * never graph connections, surveyed approaches, or additional walking distance.
+ */
+function routeDisplayPoints(points: CampusNode[], edges: CampusEdge[]): CampusNode[] {
+  return points.flatMap((point, index) => {
+    const next = points[index + 1]
+    const edge = edges[index]
+    if (!next || !edge) return [point]
+    const layer = Number(edge.layer ?? 0)
+    const elevation =
+      Number.isFinite(layer) && layer !== 0
+        ? layer * (layer < 0 ? 3 : 5)
+        : isTunnel(edge)
+          ? -3
+          : edge.bridge && edge.bridge !== "no"
+            ? 5
+            : 0
+    if (!elevation || (point.elevationM ?? 0) !== 0 || (next.elevationM ?? 0) !== 0) return [point]
+    return [
+      point,
+      ...[0.2, 0.8].map((fraction) => ({
+        id: `display:${point.id}:${next.id}:${fraction}`,
+        x: point.x + (next.x - point.x) * fraction,
+        y: point.y + (next.y - point.y) * fraction,
+        elevationM: elevation,
+      })),
+    ]
+  })
 }
 
 export const formatClassTime = (minute: number) =>

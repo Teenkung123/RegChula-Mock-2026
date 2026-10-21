@@ -1,0 +1,301 @@
+{
+  "status": "passed",
+  "validatedAt": "2026-10-21T07:12:41.817478+00:00",
+  "scope": "Fresh independent audit of the reconstructed revision-4 graph. No browser, GPU, backend, database, deployment or aggregate application result is implied.",
+  "sourceEvidenceCheckedDate": "2026-10-20",
+  "baselineCommit": "270496f12d2d1f6dcecd040e4c02fbd9e8ee2911",
+  "nodes": 5515,
+  "edges": 6153,
+  "buildings": 48,
+  "originalEdgeIdentitiesPreserved": 6012,
+  "buildingIndexUnchanged": true,
+  "compilerIdempotent": true,
+  "gradeSeparatedJunctions": 23,
+  "weakComponentCount": 105,
+  "surfaceConnectionAtTunnelNode358215242": false,
+  "generatedApproachEdges": 4,
+  "generatedPedestrianAreaEdges": 137,
+  "pedestrianAreaEdgeCounts": {
+    "1100606098": 56,
+    "1379251825": 44,
+    "1425513646": 37
+  },
+  "fullSourceObstaclePolygonsChecked": 5315,
+  "fullSourceBarrierLinesChecked": 238,
+  "unexpectedObstacleIntersections": 0,
+  "unexpectedBarrierIntersections": 0,
+  "exactReviewedFenceCrossings": [
+    {
+      "evidenceId": "tunnel-east-north",
+      "wayId": "836151470",
+      "barrierIds": [
+        "1455922944"
+      ],
+      "intersectionCount": 1
+    },
+    {
+      "evidenceId": "tunnel-east-south",
+      "wayId": "836151471",
+      "barrierIds": [
+        "31971887"
+      ],
+      "intersectionCount": 1
+    },
+    {
+      "evidenceId": "tunnel-west-north",
+      "wayId": "836151472",
+      "barrierIds": [
+        "200671068"
+      ],
+      "intersectionCount": 1
+    },
+    {
+      "evidenceId": "tunnel-west-south",
+      "wayId": "1204350167",
+      "barrierIds": [
+        "200671068"
+      ],
+      "intersectionCount": 1
+    }
+  ],
+  "areaSourcesMatchOriginalClosedWays": true,
+  "selectedAreaMultipolygonMemberships": 0,
+  "allGeneratedAreaSegmentsContained": true,
+  "allLengthsAndElevationsFinite": true,
+  "directedBuildingPairsCheckedIncludingSelf": 2304,
+  "lostReachabilityPairs": 0,
+  "longerPreviouslyReachablePairs": 0,
+  "shortenedPairs": 386,
+  "unchangedReachablePairs": 1080,
+  "unchangedUnreachablePairs": 838,
+  "routes": {
+    "MHMK-PINIT": {
+      "before": {
+        "distanceM": 946.561,
+        "minutes": 14,
+        "wayIds": [
+          "1099315060",
+          "1099315059",
+          "1099375277",
+          "707100208",
+          "1099375255",
+          "667227520",
+          "1314987676",
+          "1100607428",
+          "1150982761",
+          "1151342330",
+          "1085984283",
+          "783222755",
+          "158060532",
+          "158060516",
+          "158060522",
+          "1159702816",
+          "1204350165",
+          "1099778791",
+          "31973362",
+          "1086380519",
+          "1159702818",
+          "665899006",
+          "1157104654",
+          "630111798",
+          "1157104657",
+          "629371247"
+        ],
+        "usesTunnel": false,
+        "usesPedestrianArea": false
+      },
+      "after": {
+        "distanceM": 441.049,
+        "minutes": 7,
+        "wayIds": [
+          "1099315060",
+          "1099315059",
+          "1099375277",
+          "707100208",
+          "1099375255",
+          "667227520",
+          "1314987676",
+          "836151470",
+          "836151468",
+          "1099778794",
+          "836151467",
+          "1099778792",
+          "158060531",
+          "1204350167",
+          "1157104654",
+          "630111798",
+          "1157104657",
+          "629371247",
+          "1379251825"
+        ],
+        "usesTunnel": true,
+        "usesPedestrianArea": true
+      }
+    },
+    "MHMK-TAB": {
+      "before": {
+        "distanceM": 192.227,
+        "minutes": 3,
+        "wayIds": [
+          "1099315060",
+          "1099315059",
+          "1099375277",
+          "707100208",
+          "1099375255",
+          "667227520",
+          "1091483311",
+          "1099375237"
+        ],
+        "usesTunnel": false,
+        "usesPedestrianArea": false
+      },
+      "after": {
+        "distanceM": 192.227,
+        "minutes": 3,
+        "wayIds": [
+          "1099315060",
+          "1099315059",
+          "1099375277",
+          "707100208",
+          "1099375255",
+          "667227520",
+          "1091483311",
+          "1099375237"
+        ],
+        "usesTunnel": false,
+        "usesPedestrianArea": false
+      }
+    },
+    "MHMK-PHOTO": {
+      "before": {
+        "distanceM": 242.29,
+        "minutes": 4,
+        "wayIds": [
+          "1099315060",
+          "1099315059",
+          "1099375277",
+          "707100208",
+          "1099375255",
+          "667227520",
+          "1091483311",
+          "1099375237",
+          "1099375240",
+          "1099375241"
+        ],
+        "usesTunnel": false,
+        "usesPedestrianArea": false
+      },
+      "after": {
+        "distanceM": 232.482,
+        "minutes": 4,
+        "wayIds": [
+          "1099315060",
+          "1099315059",
+          "1099375277",
+          "707100208",
+          "1099375255",
+          "667227520",
+          "1091483311",
+          "1099375237",
+          "1100606098"
+        ],
+        "usesTunnel": false,
+        "usesPedestrianArea": true
+      }
+    }
+  },
+  "compilerRegressionTests": {
+    "command": "python scripts/campus-routing/test_graph.py",
+    "status": "passed",
+    "count": 13,
+    "covers": [
+      "concavity",
+      "polygon holes",
+      "water/planting/buildings",
+      "narrow fence exemptions",
+      "grade isolation",
+      "bridge without layer",
+      "stair interpolation",
+      "access restrictions",
+      "idempotence"
+    ]
+  },
+  "limitations": [
+    "Source evidence was reviewed on 2026-10-20; current gates, hours and closures remain unverified.",
+    "Mapped two-grade structure/stair endpoints may be transitions; no surveyed elevation or accessibility guarantee.",
+    "Rendering ramps and heights are schematic and do not change path distance.",
+    "The 0.3m inward building tolerance is inherited from the source-geometry audit.",
+    "Source and compiler tests validate the bundled snapshot, not real-world present walkability."
+  ],
+  "sha256": {
+    "apps/web/public/campus/navigation-data.json": "3fc45e2a18964ff0c2a1744f76230a4d23ee799c61532968b7c0de7b26dc65fe",
+    "docs/campus-navigation/pedestrian-source.json": "5116839a5441c60d980d23742df943245984841e52e43f30ba3601650131cc27",
+    "docs/campus-navigation/pedestrian-review.json": "84252ac11247e9a755161ef45228b13580bec0c07c0702314772b2fcb869a707",
+    "scripts/campus-routing/update_graph.py": "8f10f21605821b7c353fdc09e2881f3616317083774fae18a5c231b6dbdb670d",
+    "scripts/campus-routing/test_graph.py": "94d9a313f41fe5b3e70a11189772ff19a3451799c133b8c577422591dcea64ba",
+    "apps/web/src/lib/campus-navigation.ts": "031a7dff791922bd67ed0eb7781c3060abc0f0d175f3408e01faa16b86716748",
+    "apps/web/src/lib/campus-navigation.test.ts": "7c69c733d54f01d81bc2912adbdbe5cdee3071be1c2ff57d92d3732320b9ad67",
+    "apps/web/src/components/CampusMap.tsx": "f8f1e71121d453f2ea332111c95a9dcbd3a5b37f551854125d730700dfe9c3b1",
+    "apps/web/src/components/CampusMap.test.tsx": "c15935a7257796c5f06048e0e684db83d6f7ebe46a6dd5a757dce337db12dbc8",
+    "apps/web/src/pages/NavigationPage.tsx": "1c89d39e7d2f3a8c5ef8e7aa6d877ded8eba23620f5746efceba26deb51be1f9",
+    "apps/web/src/pages/NavigationPage.test.tsx": "da6811e59f38e081829980d9ed8a645edde255273e61b4481babf106d533c827"
+  },
+  "baselineGraphSha256": "f2b66c474e1f766437a1c20d1ab97852c5bdfe43148e2859e4b6b2564aaa8920",
+  "focusedApplicationTests": {
+    "validatedAt": "2026-10-21T07:15:45+00:00",
+    "command": "cd apps/web && node node_modules/vitest/vitest.mjs run src/lib/campus-navigation.test.ts src/components/CampusMap.test.tsx src/pages/NavigationPage.test.tsx",
+    "status": "passed",
+    "files": 3,
+    "tests": 42,
+    "scope": "Fresh independent routing, renderer-component and page-component tests; simulated renderer tests do not establish actual GPU/browser appearance."
+  },
+  "applicationRecoveryChecks": {
+    "validatedDate": "2026-10-21",
+    "webUnitTests": {
+      "command": "cd apps/web && node node_modules/vitest/vitest.mjs run",
+      "status": "passed",
+      "files": 26,
+      "tests": 140
+    },
+    "webTypecheck": {
+      "command": "node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit",
+      "status": "passed"
+    },
+    "webProductionBuild": {
+      "command": "cd apps/web && node node_modules/vite/bin/vite.js build",
+      "status": "passed",
+      "warnings": [
+        "chunk-size warning",
+        "plugin-timing warning"
+      ]
+    },
+    "focusedBiome": {
+      "command": "node node_modules/@biomejs/biome/bin/biome check [7 changed TypeScript/TSX files]",
+      "status": "passed_with_warnings",
+      "files": 7,
+      "warnings": 13,
+      "warningRule": "noNonNullAssertion",
+      "baselineWarnings": 7,
+      "addedWarnings": 6,
+      "scope": "Focused changed-source validation, not whole-repository lint."
+    },
+    "aggregate": {
+      "command": "PATH=/tmp/regchula-test-tools/node_modules/.bin:$PATH bun run check",
+      "status": "failed_at_baseline_deployment_security_assertion",
+      "passedStages": [
+        "check:elysia",
+        "check:clean-room"
+      ],
+      "blocker": "Deployment-security check requires literal .env.local ignore entry; baseline .gitignore uses .env.*. Later catalog/database and aggregate stages were not reached.",
+      "fullPass": false
+    },
+    "browserTunnelE2E": {
+      "command": "CHROMIUM_PATH=/usr/bin/chromium node node_modules/@playwright/test/cli.js test --config tests/navigation.config.ts --grep 'takes the Chula Tunnel' --project=desktop",
+      "status": "blocked_before_application_load",
+      "blocker": "Chromium process_singleton_posix socket() failed with Operation not permitted.",
+      "applicationAssertionsRun": false,
+      "observedGpuRenderingVerified": false
+    },
+    "scope": "Fresh web/graph checks only. No API/database integration pass or real-world access guarantee is implied."
+  }
+}

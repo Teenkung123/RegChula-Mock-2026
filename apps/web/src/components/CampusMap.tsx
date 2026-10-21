@@ -15,10 +15,12 @@ import {
   HemisphereLight,
   InstancedMesh,
   type Material,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   Object3D,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   SRGBColorSpace,
   Texture,
@@ -48,6 +50,8 @@ export interface CampusMapPoint {
   /** Metres east / north of the campus model's local origin. */
   x: number
   y: number
+  /** Schematic metres above or below the campus ground level, when mapped. */
+  elevationM?: number
 }
 
 export interface CampusMapLabels {
@@ -110,9 +114,24 @@ const modelUrl = `${import.meta.env.BASE_URL}campus/chula_detailed_v3_web.glb`
 const emptyBuildings: readonly CampusMapBuildingLabel[] = []
 const isFinitePoint = (point: CampusMapPoint) =>
   Number.isFinite(point.x) && Number.isFinite(point.y)
-// The audited roads and paths are at grade y=6. Keep flat overlays just above them,
-// below building roofs, so the optional depth test can reveal actual obstructions.
-const toWorld = (point: CampusMapPoint, height = 8) => new Vector3(point.x, height, -point.y)
+// The audited roads and paths are at y=6. Keep the ribbon two metres above each
+// mapped level; negative elevations still describe a tunnel, not a surface shortcut.
+const toWorld = (point: CampusMapPoint, height = 8) =>
+  new Vector3(
+    point.x,
+    height + (Number.isFinite(point.elevationM) ? (point.elevationM ?? 0) : 0),
+    -point.y,
+  )
+
+/** Keep ribbon width level across the path while following its climb or descent. */
+function routeRotation(direction: Vector3) {
+  const forward = direction.clone().normalize()
+  const right = new Vector3(0, 1, 0).cross(forward)
+  if (right.lengthSq() < 0.000001) right.set(1, 0, 0)
+  right.normalize()
+  const normal = forward.clone().cross(right).normalize()
+  return new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(right, normal, forward))
+}
 
 /** The GLB is owned by this view, including its shared geometry / materials. */
 function disposeObject(root: Object3D) {
@@ -258,10 +277,11 @@ export function CampusMap({
 
     let routeGroup = new Group()
     scene.add(routeGroup)
-    let routeMaterial: MeshBasicMaterial | null = null
-    let markerBackingMaterial: MeshBasicMaterial | null = null
-    let originMaterial: MeshBasicMaterial | null = null
-    let arrowMaterial: MeshBasicMaterial | null = null
+    let overlayMaterials: Array<{
+      material: MeshBasicMaterial
+      token: string
+      underground: boolean
+    }> = []
     let occluded = latestOcclusion.current
     let input = latestInput.current
     let markers: { element: HTMLElement; position: Vector3; width: number; height: number }[] = []
@@ -354,10 +374,9 @@ export function CampusMap({
 
     function refreshTheme() {
       renderer.setClearColor(tokenColor(viewport, "--color-paper"), 1)
-      routeMaterial?.color.copy(tokenColor(viewport, "--color-map-route"))
-      markerBackingMaterial?.color.copy(tokenColor(viewport, "--color-map-marker-outline"))
-      originMaterial?.color.copy(tokenColor(viewport, "--color-map-origin"))
-      arrowMaterial?.color.copy(tokenColor(viewport, "--color-map-route-ink"))
+      for (const { material, token } of overlayMaterials) {
+        material.color.copy(tokenColor(viewport, token))
+      }
       refreshOverlayLayout()
     }
 
@@ -375,71 +394,95 @@ export function CampusMap({
       scene.add(routeGroup)
       markerLayer.replaceChildren()
       markers = []
-      const routePaint = new MeshBasicMaterial({
-        depthTest: occluded,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      const markerBacking = new MeshBasicMaterial({
-        depthTest: occluded,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      routeMaterial = routePaint
-      markerBackingMaterial = markerBacking
-      const originPaint = routePaint.clone()
-      originMaterial = originPaint
-      arrowMaterial = routePaint.clone()
-      arrowMaterial.side = DoubleSide
-      const points = next.route.filter(isFinitePoint).map((point) => toWorld(point))
-      const segments: { start: Vector3; end: Vector3 }[] = []
+      overlayMaterials = []
+      const paints = new Map<string, MeshBasicMaterial>()
+      function paint(token: string, underground = false) {
+        const key = `${token}:${underground}`
+        const existing = paints.get(key)
+        if (existing) return existing
+        const material = new MeshBasicMaterial({
+          depthTest: occluded && !underground,
+          depthWrite: false,
+          toneMapped: false,
+          side: DoubleSide,
+        })
+        paints.set(key, material)
+        overlayMaterials.push({ material, token, underground })
+        return material
+      }
+      const points = next.route.filter(isFinitePoint).map((point) => ({
+        position: toWorld(point),
+        underground: (point.elevationM ?? 0) < 0,
+      }))
+      const segments: { start: Vector3; end: Vector3; underground: boolean }[] = []
       for (let index = 1; index < points.length; index++) {
         const start = points[index - 1]
         const end = points[index]
-        if (start && end && start.distanceToSquared(end) > 0.001) segments.push({ start, end })
+        if (start && end && start.position.distanceToSquared(end.position) > 0.001)
+          segments.push({
+            start: start.position,
+            end: end.position,
+            underground: start.underground || end.underground,
+          })
       }
       const transform = new Object3D()
-      const up = new Vector3(0, 1, 0)
       const halfWidth = 2
-      if (segments.length) {
-        const lines = new InstancedMesh(new BoxGeometry(1, 1, 1), routePaint, segments.length)
-        lines.userData.role = "route_ribbon"
-        lines.renderOrder = 11
-        segments.forEach(({ start, end }, index) => {
-          const direction = end.clone().sub(start)
-          transform.position.copy(start).add(end).multiplyScalar(0.5)
-          transform.quaternion.setFromAxisAngle(up, Math.atan2(direction.x, direction.z))
-          transform.scale.set(halfWidth * 2, 0.7, direction.length())
-          transform.updateMatrix()
-          lines.setMatrixAt(index, transform.matrix)
-        })
-        lines.computeBoundingSphere()
-        routeGroup.add(lines)
+      // A tunnel must remain visible through the ground even with building occlusion
+      // enabled. Surface and elevated legs keep their normal depth-tested behavior.
+      for (const underground of [false, true]) {
+        const levelSegments = segments.filter((segment) => segment.underground === underground)
+        if (levelSegments.length) {
+          const lines = new InstancedMesh(
+            new BoxGeometry(1, 1, 1),
+            paint("--color-map-route", underground),
+            levelSegments.length,
+          )
+          lines.userData.role = "route_ribbon"
+          lines.userData.underground = underground
+          lines.renderOrder = 11
+          levelSegments.forEach(({ start, end }, index) => {
+            const direction = end.clone().sub(start)
+            transform.position.copy(start).add(end).multiplyScalar(0.5)
+            transform.quaternion.copy(routeRotation(direction))
+            transform.scale.set(halfWidth * 2, 0.7, direction.length())
+            transform.updateMatrix()
+            lines.setMatrixAt(index, transform.matrix)
+          })
+          lines.computeBoundingSphere()
+          routeGroup.add(lines)
+        }
+        const levelPoints = points.filter((point) => point.underground === underground)
+        if (levelPoints.length) {
+          const joins = new InstancedMesh(
+            new CylinderGeometry(halfWidth, halfWidth, 0.7, 16),
+            paint("--color-map-route", underground),
+            levelPoints.length,
+          )
+          joins.userData.role = "route_join"
+          joins.userData.underground = underground
+          joins.renderOrder = 11
+          levelPoints.forEach(({ position }, index) => {
+            transform.position.copy(position)
+            transform.quaternion.identity()
+            transform.scale.setScalar(1)
+            transform.updateMatrix()
+            joins.setMatrixAt(index, transform.matrix)
+          })
+          joins.computeBoundingSphere()
+          routeGroup.add(joins)
+        }
       }
-      if (points.length) {
-        const joins = new InstancedMesh(
-          new CylinderGeometry(halfWidth, halfWidth, 0.7, 16),
-          routePaint,
-          points.length,
-        )
-        joins.renderOrder = 11
-        points.forEach((point, index) => {
-          transform.position.copy(point)
-          transform.quaternion.identity()
-          transform.scale.setScalar(1)
-          transform.updateMatrix()
-          joins.setMatrixAt(index, transform.matrix)
-        })
-        joins.computeBoundingSphere()
-        routeGroup.add(joins)
-      }
-      // Compact chevrons sit within a straight segment's ribbon, clear of its bends.
+      // Compact chevrons follow each segment's grade and stay clear of its bends.
       const totalLength = segments.reduce(
         (sum, segment) => sum + segment.start.distanceTo(segment.end),
         0,
       )
       const arrowCount = totalLength >= 16 ? Math.max(1, Math.floor(totalLength / 48)) : 0
-      const placements: Array<{ position: Vector3; angle: number }> = []
+      const placements: Array<{
+        position: Vector3
+        rotation: Quaternion
+        underground: boolean
+      }> = []
       let segmentIndex = 0
       let covered = 0
       for (let index = 0; index < arrowCount; index++) {
@@ -455,11 +498,14 @@ export function CampusMap({
         const clearance = 3.5
         if (length < clearance * 2) continue
         const offset = Math.max(clearance, Math.min(length - clearance, distance - covered))
+        const rotation = routeRotation(direction)
         const position = segment.start.clone().addScaledVector(direction, offset / length)
-        position.y = 8.7
-        placements.push({ position, angle: Math.atan2(direction.x, direction.z) })
+        position.add(new Vector3(0, 0.7, 0).applyQuaternion(rotation))
+        placements.push({ position, rotation, underground: segment.underground })
       }
-      if (placements.length) {
+      for (const underground of [false, true]) {
+        const levelPlacements = placements.filter((point) => point.underground === underground)
+        if (!levelPlacements.length) continue
         const geometry = new BufferGeometry()
         geometry.setAttribute(
           "position",
@@ -468,35 +514,38 @@ export function CampusMap({
             3,
           ),
         )
-        const arrows = new InstancedMesh(geometry, arrowMaterial, placements.length)
+        const arrows = new InstancedMesh(
+          geometry,
+          paint("--color-map-route-ink", underground),
+          levelPlacements.length,
+        )
         arrows.userData.role = "route_direction"
+        arrows.userData.underground = underground
         arrows.renderOrder = 12
-        placements.forEach(({ position, angle }, index) => {
+        levelPlacements.forEach(({ position, rotation }, index) => {
           transform.position.copy(position)
-          transform.quaternion.setFromAxisAngle(up, angle)
+          transform.quaternion.copy(rotation)
           transform.scale.setScalar(1)
           transform.updateMatrix()
           arrows.setMatrixAt(index, transform.matrix)
         })
         arrows.computeBoundingSphere()
         routeGroup.add(arrows)
-      } else {
-        arrowMaterial.dispose()
-        arrowMaterial = null
       }
       next.endpoints.filter(isFinitePoint).forEach((endpoint, index) => {
         const origin = index === 0
+        const underground = (endpoint.elevationM ?? 0) < 0
         const position = toWorld(endpoint, 9)
         const ring = new Mesh(
           origin ? new CylinderGeometry(7.5, 7.5, 0.8, 24) : new BoxGeometry(15, 0.8, 15),
-          markerBacking,
+          paint("--color-map-marker-outline", underground),
         )
         ring.position.copy(position)
         ring.renderOrder = 12
         routeGroup.add(ring)
         const dot = new Mesh(
           origin ? new CylinderGeometry(6, 6, 1, 24) : new BoxGeometry(12, 1, 12),
-          origin ? originPaint : routePaint,
+          paint(origin ? "--color-map-origin" : "--color-map-route", underground),
         )
         dot.position.copy(position)
         dot.renderOrder = 13
@@ -514,20 +563,6 @@ export function CampusMap({
         // DOM labels remain readable location anchors even when geometry is obstructed.
         markers.push({ element, position: toWorld(endpoint, 12), width: 0, height: 0 })
       })
-      if (!next.endpoints.some(isFinitePoint)) {
-        markerBacking.dispose()
-        markerBackingMaterial = null
-        originMaterial.dispose()
-        originMaterial = null
-      }
-      // Empty overlays have no meshes to release their materials during cleanup.
-      if (!routeGroup.children.length) {
-        routeMaterial.dispose()
-        routeMaterial = null
-      } else if (!points.length && next.endpoints.filter(isFinitePoint).length === 1) {
-        routeMaterial.dispose()
-        routeMaterial = null
-      }
       buildingLabels.setInput(
         next.buildings,
         next.language,
@@ -691,13 +726,8 @@ export function CampusMap({
       setRoute,
       setOcclusion: (active) => {
         occluded = active
-        for (const material of [
-          routeMaterial,
-          markerBackingMaterial,
-          originMaterial,
-          arrowMaterial,
-        ]) {
-          if (material) material.depthTest = active
+        for (const { material, underground } of overlayMaterials) {
+          material.depthTest = active && !underground
         }
         invalidate()
       },

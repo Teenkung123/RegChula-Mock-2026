@@ -280,6 +280,92 @@ describe("campus map lifecycle and controls", () => {
     }
   })
 
+  it("follows tunnel and bridge grades and keeps underground legs visible through the ground", async () => {
+    const route = [
+      { x: 0, y: 0, elevationM: 0 },
+      { x: 50, y: 0, elevationM: 0 },
+      { x: 100, y: 0, elevationM: -3 },
+      { x: 200, y: 0, elevationM: -3 },
+      { x: 250, y: 0, elevationM: 0 },
+      { x: 300, y: 0, elevationM: 5 },
+      { x: 400, y: 0, elevationM: 5 },
+    ]
+    const { rerender } = render(<CampusMap route={route} endpoints={[]} />)
+    await screen.findByRole("button", { name: "Zoom in" })
+    await waitFor(() => expect(mocks.render).toHaveBeenCalled())
+    const scene = mocks.render.mock.lastCall?.[0] as Scene
+    const segments = route.slice(1).map((end, index) => {
+      const start = route[index]
+      if (!start) throw new Error("Missing route point")
+      return {
+        start: new Vector3(start.x, 8 + start.elevationM, -start.y),
+        end: new Vector3(end.x, 8 + end.elevationM, -end.y),
+      }
+    })
+    const ribbons: InstancedMesh[] = []
+    const arrows: InstancedMesh[] = []
+    scene.traverse((object) => {
+      if (!(object instanceof InstancedMesh)) return
+      if (object.userData.role === "route_ribbon") ribbons.push(object)
+      if (object.userData.role === "route_direction") arrows.push(object)
+    })
+    expect(ribbons).toHaveLength(2)
+    expect(arrows).toHaveLength(2)
+    expect(ribbons.reduce((count, ribbon) => count + ribbon.count, 0)).toBe(segments.length)
+    const matrix = new Matrix4()
+    for (const ribbon of ribbons) {
+      for (let index = 0; index < ribbon.count; index++) {
+        ribbon.getMatrixAt(index, matrix)
+        const start = new Vector3(0, 0, -0.5).applyMatrix4(matrix)
+        const end = new Vector3(0, 0, 0.5).applyMatrix4(matrix)
+        expect(
+          segments.some(
+            (segment) =>
+              start.distanceTo(segment.start) < 0.0001 && end.distanceTo(segment.end) < 0.0001,
+          ),
+        ).toBe(true)
+      }
+    }
+    const arrowHeights: number[] = []
+    for (const group of arrows) {
+      const vertices = group.geometry.getAttribute("position")
+      for (let index = 0; index < group.count; index++) {
+        group.getMatrixAt(index, matrix)
+        const center = new Vector3().setFromMatrixPosition(matrix)
+        arrowHeights.push(center.y)
+        const forward = new Vector3(0, 0, 1).transformDirection(matrix)
+        expect(
+          segments.some(({ start, end }) => {
+            const direction = end.clone().sub(start)
+            const length = direction.length()
+            direction.normalize()
+            if (forward.dot(direction) < 0.999) return false
+            const right = new Vector3(0, 1, 0).cross(direction).normalize()
+            const normal = direction.clone().cross(right)
+            return Array.from({ length: vertices.count }, (_, vertex) =>
+              new Vector3().fromBufferAttribute(vertices, vertex).applyMatrix4(matrix).sub(start),
+            ).every((point) => {
+              const along = point.dot(direction)
+              return along >= 0 && along <= length && Math.abs(point.dot(normal) - 0.7) < 0.0001
+            })
+          }),
+        ).toBe(true)
+      }
+    }
+    expect(Math.min(...arrowHeights)).toBeCloseTo(5.7)
+    expect(Math.max(...arrowHeights)).toBeCloseTo(13.7)
+    fireEvent.click(screen.getByRole("switch", { name: "Buildings hide the route" }))
+    for (const mesh of [...ribbons, ...arrows]) {
+      expect((mesh.material as MeshBasicMaterial).depthTest).toBe(!mesh.userData.underground)
+    }
+    rerender(<CampusMap route={[...route]} endpoints={[]} />)
+    scene.traverse((object) => {
+      if (object instanceof InstancedMesh && object.userData.role?.startsWith("route_"))
+        expect((object.material as MeshBasicMaterial).depthTest).toBe(!object.userData.underground)
+    })
+    expect(mocks.parse).toHaveBeenCalledOnce()
+  })
+
   it.each([328, 356])(
     "fits initial and reset endpoints in a %spx-wide portrait viewport",
     async (width) => {
