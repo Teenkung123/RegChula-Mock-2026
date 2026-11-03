@@ -340,17 +340,20 @@ export function CampusMap({
           y > 25 &&
           y < height - 12
         marker.element.hidden = !visible
-        marker.element.style.left = `${x}px`
-        marker.element.style.top = `${y}px`
         if (visible) {
           marker.width ||= marker.element.offsetWidth || 120
           marker.height ||= marker.element.offsetHeight || 34
+          // Keep the readable pill inside the viewport without moving its mapped anchor.
+          const labelX = Math.max(marker.width / 2 + 4, Math.min(width - marker.width / 2 - 4, x))
+          const labelY = Math.max(marker.height + 8, y)
+          marker.element.style.left = `${labelX}px`
+          marker.element.style.top = `${labelY}px`
           blocked.push(
             {
-              left: x - marker.width / 2,
-              right: x + marker.width / 2,
-              top: y - marker.height - 8,
-              bottom: y - 8,
+              left: labelX - marker.width / 2,
+              right: labelX + marker.width / 2,
+              top: labelY - marker.height - 8,
+              bottom: labelY - 8,
             },
             { left: x - 12, top: y - 12, right: x + 12, bottom: y + 12 },
           )

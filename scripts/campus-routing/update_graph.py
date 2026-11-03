@@ -345,9 +345,9 @@ def main():
     parser.add_argument("--source", type=Path, default=ROOT / "docs/campus-navigation/pedestrian-source.json")
     parser.add_argument("--review", type=Path, default=ROOT / "docs/campus-navigation/pedestrian-review.json")
     args = parser.parse_args()
-    original = json.loads(args.data.read_text())
-    data = update(original, json.loads(args.source.read_text()), json.loads(args.review.read_text()))
-    args.data.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n")
+    original = json.loads(args.data.read_text(encoding="utf-8"))
+    data = update(original, json.loads(args.source.read_text(encoding="utf-8")), json.loads(args.review.read_text(encoding="utf-8")))
+    args.data.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     print(json.dumps({"nodes": len(data["nodes"]), "edges": len(data["edges"]),
                       "MHMK-PINIT": route(data, "MHMK", "PINIT"),
                       "MHMK-TAB": route(data, "MHMK", "TAB"),

@@ -27,9 +27,9 @@ def sample_snapshot():
 class PedestrianTopologyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.data = json.loads((ROOT / "apps/web/public/campus/navigation-data.json").read_text())
-        cls.source = json.loads((ROOT / "docs/campus-navigation/pedestrian-source.json").read_text())
-        cls.review = json.loads((ROOT / "docs/campus-navigation/pedestrian-review.json").read_text())
+        cls.data = json.loads((ROOT / "apps/web/public/campus/navigation-data.json").read_text(encoding="utf-8"))
+        cls.source = json.loads((ROOT / "docs/campus-navigation/pedestrian-source.json").read_text(encoding="utf-8"))
+        cls.review = json.loads((ROOT / "docs/campus-navigation/pedestrian-review.json").read_text(encoding="utf-8"))
 
     def test_regression_uses_tunnel_without_breaking_tab(self):
         route = router.route(self.data, "MHMK", "PINIT")
