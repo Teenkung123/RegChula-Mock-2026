@@ -8,7 +8,7 @@ function ownsGesture(target: EventTarget | null) {
   if (!(target instanceof Element)) return true
   if (
     target.closest(
-      'input, textarea, select, [contenteditable="true"], [role="slider"], [data-slot="slider"], [data-slot="color-slider"], [data-sidebar-swipe="ignore"], [data-horizontal-scroll]',
+      'input, textarea, select, [contenteditable="true"], [role="slider"], [data-slot="slider"], [data-slot="color-slider"], [data-sidebar-swipe="ignore"], [data-sidebar-swipe-ignore], [data-horizontal-scroll]',
     )
   )
     return true

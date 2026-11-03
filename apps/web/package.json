@@ -23,7 +23,8 @@
     "lucide-react": "1.39.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-router": "7.18.3"
+    "react-router": "7.18.3",
+    "three": "0.186.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",
@@ -31,6 +32,7 @@
     "@testing-library/react": "16.3.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
+    "@types/three": "0.185.0",
     "@vitejs/plugin-react": "6.1.1",
     "jsdom": "30.0.1",
     "tailwindcss": "4.3.3",

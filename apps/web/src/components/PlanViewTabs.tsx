@@ -1,9 +1,9 @@
-import { Clock3, CalendarDays } from "lucide-react"
+import { Clock3, CalendarDays, Route } from "lucide-react"
 import { NavLink } from "react-router"
 import { useI18n } from "../i18n"
 import styles from "./PlanViewTabs.module.css"
 
-export function PlanViewTabs({ active }: { active: "schedule" | "exams" }) {
+export function PlanViewTabs({ active }: { active: "schedule" | "exams" | "navigation" }) {
   const { text } = useI18n()
   const items = [
     {
@@ -17,6 +17,12 @@ export function PlanViewTabs({ active }: { active: "schedule" | "exams" }) {
       to: "/exams",
       icon: <Clock3 aria-hidden="true" size={16} />,
       label: text({ th: "ตารางสอบ", en: "Exam schedule", zh: "考试安排" }),
+    },
+    {
+      id: "navigation",
+      to: "/navigation",
+      icon: <Route aria-hidden="true" size={16} />,
+      label: text({ th: "เส้นทางระหว่างอาคาร", en: "Campus routes", zh: "校园路线" }),
     },
   ] as const
   return (

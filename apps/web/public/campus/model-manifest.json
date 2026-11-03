@@ -1,0 +1,113 @@
+{
+  "origin_utm_easting": 665434,
+  "origin_utm_northing": 1519346,
+  "crs": "EPSG:32647",
+  "origin_wgs84": [
+    100.53005109202093,
+    13.738638282492282
+  ],
+  "blender_axes": "X east, Y north, Z up; metres",
+  "glb_axes": "glTF Y up; Blender (X,Y,Z) maps to glTF (X,Z,-Y)",
+  "scope": "Campus preserved plus surrounding mapped city context; not cadastral parcels",
+  "campus_bbox_size_m": [
+    1475.09,
+    1281.48
+  ],
+  "building_records": 5068,
+  "rendered_building_objects": 310,
+  "parent_footprints": 271,
+  "parts": 48,
+  "objects": 5788,
+  "triangles": 183416,
+  "audit": [
+    {
+      "id": "way/1423494591",
+      "reason": "same_height_context_roof_overlap_cleanup",
+      "cut_source_ids": [
+        "way/1266545783",
+        "way/1266545781"
+      ],
+      "area_m2": 2673.97,
+      "note": "No verified architectural hierarchy or height inference; records retained."
+    }
+  ],
+  "campus_height_sources": {
+    "google_open_buildings_2023_median": 209,
+    "osm_height_tag": 28,
+    "osm_levels_x_3.5m": 28,
+    "fallback_10.5m": 45,
+    "fallback_3.5m_small_structure": 4,
+    "fallback_4m_canopy": 5
+  },
+  "campus_original_context_counts": {
+    "road": 291,
+    "water": 22,
+    "green": 101,
+    "sports": 28,
+    "path": 302,
+    "parking": 21
+  },
+  "version": "detailed_v3",
+  "bbox_wgs84": [
+    100.518,
+    13.728,
+    100.541,
+    13.749
+  ],
+  "context_building_records": 4749,
+  "road_records": 3528,
+  "road_width_sources": {
+    "osm_lanes_x_assumed_lane_width_plus_0.5m": 361,
+    "assumed_class_default": 3124,
+    "osm_width_tag": 15,
+    "inferred_from_connected_same_name_type_direction": 28
+  },
+  "road_grade_groups": {
+    "0": 3234,
+    "1": 251,
+    "-1": 21,
+    "2": 22
+  },
+  "context_height_sources": {
+    "osm_levels_x_3.5m": 1668,
+    "google_open_buildings_2023_median": 1331,
+    "fallback_10.5m": 1521,
+    "osm_height_tag": 145,
+    "fallback_4m_canopy": 28,
+    "fallback_3.5m_small_structure": 56
+  },
+  "source_date_utc": "2026-10-18",
+  "expanded_size_m": [
+    2502.09,
+    2338.96
+  ],
+  "detail_objects": 181,
+  "detail_changes": 148,
+  "campus_buildings_with_roof_details": 19,
+  "campus_buildings_with_floor_articulation": 128,
+  "campus_floor_conflicts_withheld": 9,
+  "detail_policy": "Explicit floor evidence only; unmeasured positions and roof dimensions clearly labelled; roads and neighboring context unchanged.",
+  "source_face_triangle_equivalent": 183456,
+  "glb_bytes": 14377160,
+  "exported_mesh_nodes": 5788,
+  "exports": {
+    "chula_detailed_v3.glb": {
+      "bytes": 14377160,
+      "mesh_nodes": 5788,
+      "triangles": 183416,
+      "original_campus_ids_present": 310
+    },
+    "chula_detailed_v3_web.glb": {
+      "bytes": 9279240,
+      "mesh_nodes": 1157,
+      "triangles": 183416,
+      "original_campus_ids_present": 310
+    }
+  },
+  "campus_floor_articulation_source_counts": {
+    "osm_levels_unverified": 118,
+    "official_and_osm_agree": 10
+  },
+  "campus_height_sources_note": "Inherited v2 counts; consult per-record v3 height_source for revised schematic envelopes",
+  "portico_supports_verified": true
+}

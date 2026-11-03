@@ -1,0 +1,49 @@
+[
+  {
+    "file": "source/input/context_sw.osm",
+    "url": "https://api.openstreetmap.org/api/0.6/map?bbox=100.518,13.728,100.5295,13.7385",
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors",
+    "retrieved_utc_date": "2026-10-18",
+    "bytes": 7525102,
+    "sha256": "d4d3c11f429fcd69f5b937baa2af1ec4bab774e6d32486c8ef830d72a971ddbd"
+  },
+  {
+    "file": "source/input/context_nw.osm",
+    "url": "https://api.openstreetmap.org/api/0.6/map?bbox=100.518,13.7385,100.5295,13.749",
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors",
+    "retrieved_utc_date": "2026-10-18",
+    "bytes": 4391303,
+    "sha256": "8c9d4703a385e12526aff6306c9ab9dd0adcc0821800942faaa0e616d6426902"
+  },
+  {
+    "file": "source/input/context_se.osm",
+    "url": "https://api.openstreetmap.org/api/0.6/map?bbox=100.5295,13.728,100.541,13.7385",
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors",
+    "retrieved_utc_date": "2026-10-18",
+    "bytes": 4678857,
+    "sha256": "12959139d506aab1887916516ff636d2881a8816d38610b6662f5d9ba34ba142"
+  },
+  {
+    "file": "source/input/context_ne.osm",
+    "url": "https://api.openstreetmap.org/api/0.6/map?bbox=100.5295,13.7385,100.541,13.749",
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors",
+    "retrieved_utc_date": "2026-10-18",
+    "bytes": 3829795,
+    "sha256": "3211920a7ba6d629c8f0126be4ca1e29fc9aad16bfd78ed599f127ba17f63133"
+  },
+  {
+    "file": "source/input/open_data/chula_height_presence_2023_4m.tif",
+    "url": "https://storage.googleapis.com/open-buildings-temporal-data/v1/geotiffs/30e2c_2023_06_30/tile_wHHmRWWfT5c.tif",
+    "license": "CC-BY-4.0",
+    "attribution": "Google Research Open Buildings 2.5D Temporal Dataset v1; Copernicus Sentinel-2",
+    "epoch": "2023-06-30",
+    "retrieved_utc_date": "2026-10-18",
+    "bytes": 2141012,
+    "sha256": "90a60e2c5b91cd9559d086c9d61433ddb080f35a50c1ce788db5d0a70d0fc9d0",
+    "crop_manifest": "source/input/open_data/height_clip_manifest.json"
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "scope": "Historical pre-revision-4 baseline only; current reviewed pedestrian overlay validation is in pedestrian-validation.json.",
+  "baselineCommit": "270496f12d2d1f6dcecd040e4c02fbd9e8ee2911",
+  "currentGraphValidation": "pedestrian-validation.json",
+  "passed": [
+    "Every edge is consecutive original OSM node pair",
+    "No ground edge intersects buffered building interior except mapped building_passage",
+    "Way/node access restrictions applied with permit/destination/use_sidepath/conditional regression tests",
+    "No geometric intersection connections invented"
+  ],
+  "nodes": 5469,
+  "edges": 6012,
+  "exampleDistanceM": 192.2,
+  "exampleStepsEdges": 1,
+  "exampleSharedRoadEdges": 2
+}
