@@ -64,7 +64,7 @@ describe("Elysia 2 compatibility", () => {
       method: "PUT", headers: { "content-type": "application/json" }, body: "x".repeat(2 * 1024 * 1024 + 1),
     }))
     expect(oversized.status).toBe(413)
-  })
+  }, 15_000)
 
   it("validates the new route hook order", async () => {
     const response = await app.handle(

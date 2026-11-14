@@ -17,17 +17,32 @@ describe("runtime configuration", () => {
   it("accepts exact network origins and rejects wildcard or path origins", () => {
     const value = loadConfig({
       ...validEnvironment,
-      WEB_ADDITIONAL_ORIGINS: "http://192.168.1.115:5173, http://100.88.122.114:5173",
+      WEB_ADDITIONAL_ORIGINS: "http://192.0.2.10:5173, http://198.51.100.10:5173",
     })
     expect(value.webOrigins).toEqual([
       "http://localhost:5173",
       "http://localhost:5174",
-      "http://192.168.1.115:5173",
-      "http://100.88.122.114:5173",
+      "http://192.0.2.10:5173",
+      "http://198.51.100.10:5173",
     ])
     for (const origin of ["*", "https://example.com/path", "https://user@example.com", "null"]) {
       expect(() => loadConfig({ ...validEnvironment, WEB_ADDITIONAL_ORIGINS: origin })).toThrow()
     }
+  })
+
+  it("uses configured frontend ports for local development origins", () => {
+    const environment = {
+      ...validEnvironment,
+      REGCHULA_WEB_PORT: "15173",
+      REGCHULA_STAFF_PORT: "15174",
+    }
+    expect(loadConfig(environment).webOrigins).toEqual([
+      "http://localhost:15173",
+      "http://localhost:15174",
+    ])
+    expect(
+      loadConfig({ ...environment, APP_ENV: "production", AUTH_MODE: "disabled" }).webOrigins,
+    ).toEqual(["http://localhost:5173"])
   })
 
   it("uses bounded production-safe runtime defaults", () => {

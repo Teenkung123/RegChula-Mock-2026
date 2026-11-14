@@ -1,7 +1,6 @@
 services:
   mysql:
     image: mysql:8.4
-    container_name: regchula-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: regchula_root_dev
@@ -10,7 +9,7 @@ services:
       MYSQL_PASSWORD: regchula_dev
       TZ: Asia/Bangkok
     ports:
-      - "127.0.0.1:3307:3306"
+      - "127.0.0.1:${REGCHULA_MYSQL_PORT:-3307}:3306"
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_0900_ai_ci
@@ -24,11 +23,10 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    container_name: regchula-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory", "768mb", "--maxmemory-policy", "noeviction", "--requirepass", "regchula_redis_dev"]
     ports:
-      - "127.0.0.1:6380:6379"
+      - "127.0.0.1:${REGCHULA_REDIS_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "regchula_redis_dev", "ping"]
       interval: 3s

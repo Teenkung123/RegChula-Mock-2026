@@ -31,19 +31,37 @@ if (existsSync(target)) {
 }
 
 const secret = () => randomBytes(32).toString("base64url")
+const configuredPorts = [
+  "REGCHULA_MYSQL_PORT",
+  "REGCHULA_REDIS_PORT",
+  "REGCHULA_WEB_PORT",
+  "REGCHULA_STAFF_PORT",
+] as const
+for (const name of ["API_PORT", ...configuredPorts]) {
+  const value = process.env[name]
+  if (
+    value !== undefined &&
+    (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65_535)
+  ) {
+    throw new Error(`${name} must be a port from 1 to 65535`)
+  }
+}
+const mysqlPort = process.env.REGCHULA_MYSQL_PORT ?? "3307"
+const redisPort = process.env.REGCHULA_REDIS_PORT ?? "6380"
 const content = [
   "APP_ENV=development",
   "AUTH_MODE=local-mock",
   "API_HOST=127.0.0.1",
-  "API_PORT=3000",
-  "WEB_ORIGIN=http://localhost:5173",
-  "DATABASE_URL=mysql://regchula:regchula_dev@127.0.0.1:3307/regchula",
-  "REDIS_URL=redis://:regchula_redis_dev@127.0.0.1:6380",
+  `API_PORT=${process.env.API_PORT ?? 3000}`,
+  `WEB_ORIGIN=http://localhost:${process.env.REGCHULA_WEB_PORT ?? 5173}`,
+  `DATABASE_URL=mysql://regchula:regchula_dev@127.0.0.1:${mysqlPort}/regchula`,
+  `REDIS_URL=redis://:regchula_redis_dev@127.0.0.1:${redisPort}`,
+  ...configuredPorts.flatMap((name) => (process.env[name] ? [`${name}=${process.env[name]}`] : [])),
   `COOKIE_SECRET=${secret()}`,
   `CHALLENGE_SECRET=${secret()}`,
   `CONFIRMATION_SECRET=${secret()}`,
   "",
 ].join("\n")
 
-await writeFile(target, content, { encoding: "utf8", flag: "wx" })
+await writeFile(target, content, { encoding: "utf8", flag: "wx", mode: 0o600 })
 console.log("[setup] Created .env.local with development-only secrets")

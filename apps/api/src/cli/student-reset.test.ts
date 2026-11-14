@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert"
 import { execFile } from "node:child_process"
-import { mkdtemp, open, rmdir, unlink } from "node:fs/promises"
+import { mkdir, mkdtemp, open, rmdir, unlink } from "node:fs/promises"
 import { resolve } from "node:path"
 import { test } from "node:test"
 import { promisify } from "node:util"
@@ -72,7 +72,9 @@ test("Windows backup ACL is restricted before data is written and errors fail cl
 test("Windows applies a non-inherited backup ACL", {
   skip: process.platform !== "win32",
 }, async () => {
-  const directory = await mkdtemp(resolve("tmp", "student-reset-acl-"))
+  const parent = resolve("tmp")
+  await mkdir(parent, { recursive: true })
+  const directory = await mkdtemp(resolve(parent, "student-reset-acl-"))
   const path = resolve(directory, "empty.json")
   try {
     const file = await open(path, "wx", 0o600)

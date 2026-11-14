@@ -10,7 +10,7 @@ const rejectText = (source: string, rejected: RegExp, label: string) => {
   if (rejected.test(source)) throw new Error(`${label} contains a forbidden deployment pattern`)
 }
 
-const [compose, kustomization, api, mysql, redis, policies, ignore, ...launchers] =
+const [compose, kustomization, api, mysql, redis, policies, ignore, devWrapper, ...launchers] =
   await Promise.all([
     read("compose.yml"),
     read("deploy/k8s/kustomization.yaml"),
@@ -35,8 +35,16 @@ const [staff, staffProxy, staffTunnel, staffBootstrap, prepareRelease, verifyRel
     read("scripts/verify-k8s-release.ts"),
   ])
 
-requireText(compose, '"127.0.0.1:3307:3306"', "Compose MySQL loopback binding")
-requireText(compose, '"127.0.0.1:6380:6379"', "Compose Redis loopback binding")
+requireText(
+  compose,
+  `"127.0.0.1:\${REGCHULA_MYSQL_PORT:-3307}:3306"`,
+  "Compose MySQL loopback binding",
+)
+requireText(
+  compose,
+  `"127.0.0.1:\${REGCHULA_REDIS_PORT:-6380}:6379"`,
+  "Compose Redis loopback binding",
+)
 requireText(redis, "--maxmemory-policy noeviction", "Redis fail-closed memory policy")
 requireText(api, "type: Recreate", "API security-boundary rollout")
 requireText(policies, 'policyTypes: ["Ingress", "Egress"]', "default-deny policy")
@@ -72,6 +80,7 @@ for (const [path, source] of [
   )
 }
 for (const source of launchers) requireText(source, "compose.yml", "Pinned Compose launcher")
+requireText(devWrapper, "run dev", "Windows development launcher")
 const k8sStartup = await read("start-k8s.bat")
 requireText(
   k8sStartup,

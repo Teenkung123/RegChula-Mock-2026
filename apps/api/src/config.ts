@@ -81,10 +81,17 @@ export function loadConfig(environment: Environment = process.env) {
       "AUTH_MODE=local-mock requires a loopback API_HOST unless ALLOW_CONTAINER_MOCK_AUTH=true",
     )
   }
-  const webOrigin = environment.WEB_ORIGIN ?? "http://localhost:5173"
+  const localDevelopment = appEnv === "development" || appEnv === "test"
+  const webPort = localDevelopment
+    ? integer(environment, "REGCHULA_WEB_PORT", 5173, 1, 65_535)
+    : 5173
+  const staffPort = localDevelopment
+    ? integer(environment, "REGCHULA_STAFF_PORT", 5174, 1, 65_535)
+    : 5174
+  const webOrigin = environment.WEB_ORIGIN ?? `http://localhost:${webPort}`
   const webOrigins = [
     webOrigin,
-    ...(appEnv === "development" || appEnv === "test" ? ["http://localhost:5174"] : []),
+    ...(localDevelopment ? [`http://localhost:${staffPort}`] : []),
     ...(environment.WEB_ADDITIONAL_ORIGINS ?? "").split(","),
   ]
     .map((value) => value.trim())

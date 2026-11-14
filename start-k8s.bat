@@ -65,24 +65,12 @@ for %%F in (.env.k8s.local .env.k8s.mysql.local .env.k8s.redis.local) do (
 
 if "!seed_required!"=="0" goto seed_ready
 echo [RegChula] Preparing a logical seed from the existing recoverable Docker volume...
-docker compose -f "!PROJECT_DIR!\compose.yml" --project-directory "!PROJECT_DIR!" up -d mysql || exit /b 1
-set /a tries=0
-:wait_compose_mysql
-for /f "usebackq delims=" %%H in (`docker inspect --format="{{.State.Health.Status}}" regchula-mysql 2^>nul`) do set "mysql_health=%%H"
-if "!mysql_health!"=="healthy" goto compose_mysql_ready
-timeout /t 2 /nobreak >nul
-set /a tries+=1
-if !tries! GEQ 60 (
-  echo [RegChula] Existing MySQL did not become healthy within 120 seconds.
-  exit /b 1
-)
-goto wait_compose_mysql
-:compose_mysql_ready
+docker compose -f "!PROJECT_DIR!\compose.yml" --project-directory "!PROJECT_DIR!" up --wait --wait-timeout 120 mysql || exit /b 1
 "!BUN_EXE!" run apps/api/src/cli/migrate.ts || exit /b 1
 "!BUN_EXE!" run apps/api/src/cli/catalog-import.ts || exit /b 1
 "!BUN_EXE!" run apps/api/src/cli/catalog-status.ts || exit /b 1
 if not exist "tmp" mkdir "tmp"
-docker exec regchula-mysql mysqldump -uregchula -pregchula_dev --single-transaction --no-tablespaces --routines --triggers --events --hex-blob --default-character-set=utf8mb4 regchula > "tmp\regchula-k8s-seed.sql" || exit /b 1
+docker compose -f "!PROJECT_DIR!\compose.yml" --project-directory "!PROJECT_DIR!" exec -T mysql mysqldump -uregchula -pregchula_dev --single-transaction --no-tablespaces --routines --triggers --events --hex-blob --default-character-set=utf8mb4 regchula > "tmp\regchula-k8s-seed.sql" || exit /b 1
 :seed_ready
 
 echo [RegChula] Building pinned local API, web, and staff images...

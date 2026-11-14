@@ -2,7 +2,6 @@ param([switch]$CheckOnly)
 
 $ErrorActionPreference = 'Stop'
 $localPort = 15173
-$publicOrigin = 'https://main-pc.taila84498.ts.net'
 $kubectl = (Get-Command kubectl.exe -ErrorAction Stop).Source
 $tailscale = (Get-Command tailscale.exe -ErrorAction Stop).Source
 
@@ -83,6 +82,5 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "[RegChula] Public site: $publicOrigin"
 Write-Host '[RegChula] Anyone with this URL can reach the mock site while this PC, Docker Desktop, Kubernetes, and Tailscale remain running.'
 Write-Host '[RegChula] Run stop-public.bat to close public access without stopping the site, or stop.bat to close access and stop all workloads.'

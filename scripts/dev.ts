@@ -1,26 +1,50 @@
 import { resolve } from "node:path"
 
 const root = resolve(import.meta.dir, "..")
-const serviceContainers = ["regchula-mysql", "regchula-redis"] as const
+const apiPort = process.env.API_PORT ?? "3000"
+const webPort = process.env.REGCHULA_WEB_PORT ?? "5173"
+const staffPort = process.env.REGCHULA_STAFF_PORT ?? "5174"
 const wait = (milliseconds: number) =>
   new Promise<void>((resolveWait) => {
     setTimeout(resolveWait, milliseconds)
   })
 
-async function inspectServiceHealth(container: string): Promise<string> {
-  const child = Bun.spawn(["docker", "inspect", "--format={{.State.Health.Status}}", container], {
+async function run(args: string[], error: string) {
+  const child = Bun.spawn(args, {
     cwd: root,
-    stdout: "pipe",
-    stderr: "pipe",
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
   })
-  const output = new Response(child.stdout).text()
-  const exitCode = await child.exited
-  return exitCode === 0 ? (await output).trim() : ""
+  if ((await child.exited) !== 0) throw new Error(error)
 }
 
-async function ensureServices() {
+async function prepareLocalStack() {
+  if (process.env.APP_ENV && process.env.APP_ENV !== "development") {
+    throw new Error("The development launcher requires APP_ENV=development.")
+  }
+  for (const [name, protocol, port] of [
+    ["DATABASE_URL", "mysql:", process.env.REGCHULA_MYSQL_PORT ?? "3307"],
+    ["REDIS_URL", "redis:", process.env.REGCHULA_REDIS_PORT ?? "6380"],
+  ] as const) {
+    const value = process.env[name]
+    if (value === undefined) continue
+    const url = URL.parse(value)
+    if (
+      !url ||
+      url.protocol !== protocol ||
+      !["localhost", "127.0.0.1"].includes(url.hostname) ||
+      url.port !== port
+    ) {
+      throw new Error(`${name} must point to the local Compose service on port ${port}.`)
+    }
+  }
+
+  const runScript = (name: string) =>
+    run([process.execPath, "run", name], `Startup step '${name}' failed.`)
+  await runScript("setup:env")
   console.log("[dev] Starting MySQL and Redis...")
-  const child = Bun.spawn(
+  await run(
     [
       "docker",
       "compose",
@@ -29,34 +53,22 @@ async function ensureServices() {
       "--project-directory",
       root,
       "up",
-      "-d",
+      "--wait",
+      "--wait-timeout",
+      "120",
       "mysql",
       "redis",
     ],
-    {
-      cwd: root,
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    },
+    "Could not start MySQL and Redis. Check that Docker and Docker Compose are running and that the host ports are free.",
   )
-  if ((await child.exited) !== 0) {
-    throw new Error(
-      "Could not start MySQL. Start Docker Desktop, then run start.bat or bun run dev.",
-    )
-  }
-
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const states = await Promise.all(serviceContainers.map(inspectServiceHealth))
-    if (states.every((state) => state === "healthy")) return
-    await wait(2_000)
-  }
-  throw new Error("MySQL and Redis did not become healthy within 120 seconds.")
+  await runScript("db:migrate")
+  await runScript("auth:cleanup")
+  await runScript("catalog:import")
 }
 
 async function isRegChulaApiReady() {
   try {
-    const response = await fetch("http://127.0.0.1:3000/api/v1/health/live", {
+    const response = await fetch(`http://127.0.0.1:${apiPort}/api/v1/health/live`, {
       signal: AbortSignal.timeout(2_000),
     })
     if (!response.ok) return false
@@ -69,7 +81,7 @@ async function isRegChulaApiReady() {
 
 async function isRegChulaWebReady() {
   try {
-    const response = await fetch("http://127.0.0.1:5173", {
+    const response = await fetch(`http://127.0.0.1:${webPort}`, {
       signal: AbortSignal.timeout(2_000),
     })
     return response.ok && (await response.text()).includes("<title>RegChula</title>")
@@ -80,7 +92,7 @@ async function isRegChulaWebReady() {
 
 async function isRegChulaStaffReady() {
   try {
-    const response = await fetch("http://127.0.0.1:5174", {
+    const response = await fetch(`http://127.0.0.1:${staffPort}`, {
       signal: AbortSignal.timeout(2_000),
     })
     return response.ok && (await response.text()).includes("<title>RegChula · Staff</title>")
@@ -94,39 +106,61 @@ async function monitorExistingServices() {
   while (true) {
     await wait(5_000)
     const [apiReady, webReady, staffReady] = await Promise.all([
-      isRegChulaApiReady(), isRegChulaWebReady(), isRegChulaStaffReady(),
+      isRegChulaApiReady(),
+      isRegChulaWebReady(),
+      isRegChulaStaffReady(),
     ])
     if (!apiReady || !webReady || !staffReady) {
-      const stopped = [apiReady ? undefined : "API", webReady ? undefined : "web app", staffReady ? undefined : "staff app"]
+      const stopped = [
+        apiReady ? undefined : "API",
+        webReady ? undefined : "web app",
+        staffReady ? undefined : "staff app",
+      ]
         .filter(Boolean)
         .join(" and ")
-      throw new Error(`The reused RegChula ${stopped} stopped responding. Run start.bat again.`)
+      throw new Error(`The reused RegChula ${stopped} stopped responding. Run bun run dev again.`)
     }
   }
 }
 
 async function main() {
-  await ensureServices()
+  if (process.argv.includes("--help")) {
+    console.log("Use Bun 1.3.14, Node.js 20.19+ (20.x) or 22.12+, and Docker Compose.")
+    console.log("Run bun install --frozen-lockfile, then bun run dev from the checkout.")
+    console.log("Student web http://localhost:5173  Staff web http://localhost:5174")
+    console.log("Run bun run staff:bootstrap --stdin to create the first administrator.")
+    return
+  }
+  await prepareLocalStack()
   const [apiReady, webReady, staffReady] = await Promise.all([
-    isRegChulaApiReady(), isRegChulaWebReady(), isRegChulaStaffReady(),
+    isRegChulaApiReady(),
+    isRegChulaWebReady(),
+    isRegChulaStaffReady(),
   ])
-  const scripts = [apiReady ? undefined : "dev:api", webReady ? undefined : "dev:web", staffReady ? undefined : "dev:staff"].filter(
-    (script): script is string => Boolean(script),
+  const scripts = [
+    apiReady ? undefined : "dev:api",
+    webReady ? undefined : "dev:web",
+    staffReady ? undefined : "dev:staff",
+  ].filter((script): script is string => Boolean(script))
+  if (apiReady) console.log(`[dev] Reusing the healthy RegChula API on port ${apiPort}.`)
+  if (webReady) console.log(`[dev] Reusing the healthy RegChula web app on port ${webPort}.`)
+  if (staffReady) console.log(`[dev] Reusing the healthy RegChula staff app on port ${staffPort}.`)
+  console.log(
+    `[dev] Student web: http://localhost:${webPort}  Staff web: http://localhost:${staffPort}`,
   )
-  if (apiReady) console.log("[dev] Reusing the healthy RegChula API on port 3000.")
-  if (webReady) console.log("[dev] Reusing the healthy RegChula web app on port 5173.")
-  if (staffReady) console.log("[dev] Reusing the healthy RegChula staff app on port 5174.")
   if (scripts.length === 0) {
-    console.log("[dev] RegChula is already running at http://localhost:5173 and http://localhost:5174")
     await monitorExistingServices()
     return
   }
 
   console.log(`[dev] MySQL and Redis are ready. Starting ${scripts.join(" and ")}...`)
-  const runArguments =
-    scripts.length === 1
-      ? [process.execPath, "run", scripts[0] as string]
-      : [process.execPath, "run", "--parallel", ...scripts]
+  const runArguments = [
+    process.execPath,
+    `--env-file=${resolve(root, ".env.local")}`,
+    "run",
+    ...(scripts.length === 1 ? [] : ["--parallel"]),
+    ...scripts,
+  ]
   const dev = Bun.spawn(runArguments, {
     cwd: root,
     stdin: "inherit",
