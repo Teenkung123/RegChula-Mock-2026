@@ -5,6 +5,7 @@ resources:
   - base/network-policy.yaml
   - base/api.yaml
   - base/web.yaml
+  - base/staff.yaml
   - base/mysql.yaml
   - base/redis.yaml
   - base/jobs.yaml

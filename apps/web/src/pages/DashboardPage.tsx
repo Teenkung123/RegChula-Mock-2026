@@ -5,6 +5,7 @@ import { NextClassCard } from "../components/NextClassCard"
 import { Status } from "../components/ui"
 import { useI18n } from "../i18n"
 import { getAnnouncements, getRegistrations } from "../lib/api"
+import { MAX_REGISTRATION_CREDITS } from "../lib/registration-credits"
 import styles from "./pages.module.css"
 
 export function DashboardPage() {
@@ -25,7 +26,7 @@ export function DashboardPage() {
   const termLabel = term
     ? `${String(term.academicYear)}/${String(term.semester)}`
     : t("common.currentTerm")
-  const remainingCredits = Math.max(21 - credits, 0)
+  const remainingCredits = Math.max(MAX_REGISTRATION_CREDITS - credits, 0)
   const creditsLabel = (value: number) =>
     text({
       th: `${value} หน่วยกิต`,
@@ -92,7 +93,7 @@ export function DashboardPage() {
             <span>{text({ th: "หน่วยกิตในภาคนี้", en: "Credits this term", zh: "本学期学分" })}</span>
             <strong>
               {credits}
-              <small>/ 21</small>
+              <small>/ {MAX_REGISTRATION_CREDITS}</small>
             </strong>
             <small>
               {text({
@@ -130,13 +131,6 @@ export function DashboardPage() {
               <h2 id="announcements-heading">
                 {text({ th: "ประกาศ", en: "Announcements", zh: "公告" })}
               </h2>
-              <p>
-                {text({
-                  th: "ข้อมูลสำหรับการใช้งานระบบตัวอย่าง",
-                  en: "Information for using this demo system",
-                  zh: "演示系统使用信息",
-                })}
-              </p>
             </div>
           </header>
           {announcements.isError ? (

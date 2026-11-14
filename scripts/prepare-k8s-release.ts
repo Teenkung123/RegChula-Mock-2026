@@ -27,23 +27,25 @@ async function imageFor(repository: string) {
 
 const api = await imageFor("regchula-api")
 const web = await imageFor("regchula-web")
+const staff = await imageFor("regchula-staff")
 await mkdir(directory, { recursive: true })
 for (const [file, expected] of [
   ["api.yaml", 1],
   ["web.yaml", 1],
+  ["staff.yaml", 1],
   ["jobs.yaml", 2],
 ] as const) {
   const source = await readFile(resolve(root, "deploy/k8s/base", file), "utf8")
   let replacements = 0
   const rendered = source.replace(
-    /image: (regchula-api|regchula-web):local\b/g,
+    /image: (regchula-api|regchula-web|regchula-staff):local\b/g,
     (_match, repository: string) => {
       replacements += 1
-      return `image: ${repository === "regchula-api" ? api : web}`
+      return `image: ${repository === "regchula-api" ? api : repository === "regchula-web" ? web : staff}`
     },
   )
   if (replacements !== expected) throw new Error(`Unexpected image declarations in ${file}`)
   await writeFile(resolve(directory, file), rendered)
 }
-await writeFile(resolve(directory, "release.json"), JSON.stringify({ api, web }, null, 2))
+await writeFile(resolve(directory, "release.json"), JSON.stringify({ api, web, staff }, null, 2))
 console.log(`[RegChula] Prepared release ${releaseId} with content-specific image tags.`)

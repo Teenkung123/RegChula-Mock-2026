@@ -57,6 +57,19 @@ async function revokeHashedSessions(hashes: readonly string[]): Promise<void> {
   )
 }
 
+/** Revoke sessions while the caller holds the student's credential row lock. */
+export async function revokeStudentSessions(
+  connection: QueryConnection,
+  studentId: string,
+): Promise<void> {
+  const [sessions] = await connection.query<SessionHashRow[]>(
+    "SELECT token_hash FROM student_sessions WHERE student_id = ? FOR UPDATE",
+    [studentId],
+  )
+  await revokeHashedSessions(sessions.map((row) => row.token_hash))
+  await connection.execute("DELETE FROM student_sessions WHERE student_id = ?", [studentId])
+}
+
 const parseCachedSession = (value: string): CachedSession | null => {
   try {
     const parsed = JSON.parse(value) as Partial<CachedSession>

@@ -45,7 +45,7 @@ async function mockSession(
 }
 
 async function expectRouteInView(page: Page) {
-  const map = page.getByRole("application", { name: "Campus walking map" })
+  const map = page.getByRole("application", { name: "Campus route map" })
   await expect
     .poll(() =>
       map.evaluate((viewport) => {
@@ -71,7 +71,58 @@ async function expectRouteInView(page: Page) {
     )
     .toEqual([true, true])
 }
-test("shows timetable route, interactive map, example toggle and responsive layout", async ({
+
+async function expectBuildingLabelsPlaced(page: Page) {
+  const map = page.getByRole("application", { name: "Campus route map" })
+  const names = map.getByRole("list", { name: "Building names" })
+  await expect.poll(() => names.getByRole("listitem").count()).toBeGreaterThan(0)
+  await expect
+    .poll(() =>
+      map.evaluate((viewport) => {
+        const frame = viewport.getBoundingClientRect()
+        const labels = [...viewport.querySelectorAll<HTMLElement>("[data-building-id]")]
+          .filter((label) => !label.hidden)
+          .map((label) => label.getBoundingClientRect())
+        const blocks = [
+          ...viewport.querySelectorAll<HTMLElement>("[data-endpoint]"),
+          ...(viewport.parentElement?.querySelectorAll<HTMLElement>("[data-map-control]") ?? []),
+        ]
+          .filter((element) => !element.hidden)
+          .map((element) => element.getBoundingClientRect())
+        const overlaps = (a: DOMRect, b: DOMRect) =>
+          a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+        return {
+          inside: labels.every(
+            (label) =>
+              label.left >= frame.left &&
+              label.right <= frame.right &&
+              label.top >= frame.top &&
+              label.bottom <= frame.bottom,
+          ),
+          clear: labels.every((label) => blocks.every((block) => !overlaps(label, block))),
+        }
+      }),
+    )
+    .toEqual({ inside: true, clear: true })
+}
+
+async function cameraAngles(page: Page) {
+  return page.locator("[data-map-heading]").evaluate((compass) => ({
+    heading: Number(compass.getAttribute("data-map-heading")),
+    tilt: Number(compass.getAttribute("data-map-tilt")),
+  }))
+}
+
+async function expectHeading(page: Page, degrees: number) {
+  await expect
+    .poll(async () => {
+      const { heading } = await cameraAngles(page)
+      return Math.abs(((heading - degrees + 540) % 360) - 180)
+    })
+    .toBeLessThan(2)
+}
+
+test("shows timetable route, interactive map and responsive layout without an example route", async ({
   page,
 }, info) => {
   const errors: string[] = []
@@ -84,7 +135,7 @@ test("shows timetable route, interactive map, example toggle and responsive layo
   await expect(page.getByTestId("campus-navigation")).toContainText("Floor 2")
   await expect(page.getByTestId("campus-navigation")).toContainText("About 15 min for walking")
   await expect(page.getByRole("button", { name: "Move map", exact: true })).toHaveCount(0)
-  const map = page.getByRole("application", { name: "Campus walking map" })
+  const map = page.getByRole("application", { name: "Campus route map" })
   await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
   await expect(map).toHaveAttribute("tabindex", "0")
   await expectRouteInView(page)
@@ -107,9 +158,8 @@ test("shows timetable route, interactive map, example toggle and responsive layo
   await page.getByRole("button", { name: "Zoom in", exact: true }).click()
   await page.getByRole("button", { name: "Show route" }).click()
   await expectRouteInView(page)
-  await page.getByRole("button", { name: "Try MHMK M01 → TAB220" }).click()
-  await expect(page.getByText("Example route · not your timetable")).toBeVisible()
-  await page.getByRole("button", { name: "Back to my classes" }).click()
+  await expect(page.getByRole("button", { name: "Try MHMK M01 → TAB220" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Back to my classes" })).toHaveCount(0)
   await expect(page.getByText("Example route · not your timetable")).toHaveCount(0)
   await expectRouteInView(page)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -133,6 +183,8 @@ test("keeps known overlap visible for unresolved building and handles empty sche
   await mockSession(page, [])
   await page.reload()
   await expect(page.getByTestId("campus-navigation")).toContainText("No consecutive classes")
+  await expect(page.getByRole("button", { name: "Try MHMK M01 → TAB220" })).toHaveCount(0)
+  await expect(page.locator("[data-endpoint]")).toHaveCount(0)
 })
 test("model failure preserves route summary and allows retry", async ({ page }) => {
   await mockSession(page)
@@ -144,7 +196,7 @@ test("model failure preserves route summary and allows retry", async ({ page }) 
   await expect(page.getByTestId("campus-navigation")).toContainText("192 m")
   await page.unroute("**/campus/*.glb")
   await page.getByRole("button", { name: "Retry map", exact: true }).click()
-  await expect(page.getByRole("application", { name: "Campus walking map" })).toHaveAttribute(
+  await expect(page.getByRole("application", { name: "Campus route map" })).toHaveAttribute(
     "aria-busy",
     "false",
     { timeout: 45000 },
@@ -175,10 +227,36 @@ test("resolves PHOTO 501 from the supplied classroom example", async ({ page }, 
   await page.screenshot({ path: `tmp/navigation-${info.project.name}-photo.png`, fullPage: true })
 })
 
+for (const code of ["MATH", "MHVH"]) {
+  test(`maps ${code} classes to Maha Vajirunhis Building and an outdoor route`, async ({
+    page,
+  }) => {
+    await mockSession(page, [
+      registration(1, code, "208", 540, 600),
+      registration(2, "TAB", "220", 620, 660),
+    ])
+    await page.goto("/navigation")
+    const navigation = page.getByTestId("campus-navigation")
+    await expect(navigation).toContainText(`${code} 208`)
+    await expect(navigation).toContainText("Maha Vajirunhis Building")
+    await expect(navigation).toContainText("203 m")
+    await expect(navigation).toContainText("~3 min")
+    await expect(navigation).not.toContainText("We have not mapped this building")
+    const map = page.getByRole("application", { name: "Campus route map" })
+    await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
+    await expect(map.locator('[data-endpoint="origin"]')).toContainText("MATH")
+    await expect(map.locator('[data-endpoint="destination"]')).toContainText("TAB")
+    await expectRouteInView(page)
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click()
+    await page.getByRole("button", { name: "Show route", exact: true }).click()
+    await expectRouteInView(page)
+  })
+}
+
 test("renders directional routes and building occlusion in dark mode", async ({ page }, info) => {
   await mockSession(page, undefined, "dark")
   await page.goto("/navigation")
-  const map = page.getByRole("application", { name: "Campus walking map" })
+  const map = page.getByRole("application", { name: "Campus route map" })
   await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
   await expectRouteInView(page)
   await page.getByText("Buildings hide the route", { exact: true }).click()
@@ -191,44 +269,17 @@ test("renders directional routes and building occlusion in dark mode", async ({ 
 test("shows readable building names without covering markers or controls", async ({ page }) => {
   await mockSession(page)
   await page.goto("/navigation")
-  const map = page.getByRole("application", { name: "Campus walking map" })
+  const map = page.getByRole("application", { name: "Campus route map" })
   await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
-  const names = map.getByRole("list", { name: "Building names" })
-  await expect.poll(() => names.getByRole("listitem").count()).toBeGreaterThan(0)
-  const placement = () =>
-    map.evaluate((viewport) => {
-      const frame = viewport.getBoundingClientRect()
-      const labels = [...viewport.querySelectorAll<HTMLElement>("[data-building-id]")]
-        .filter((label) => !label.hidden)
-        .map((label) => label.getBoundingClientRect())
-      const blocks = [
-        ...viewport.querySelectorAll<HTMLElement>("[data-endpoint]"),
-        ...(viewport.parentElement?.querySelectorAll<HTMLElement>("[data-map-control]") ?? []),
-      ]
-        .filter((element) => !element.hidden)
-        .map((element) => element.getBoundingClientRect())
-      const overlaps = (a: DOMRect, b: DOMRect) =>
-        a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
-      return {
-        inside: labels.every(
-          (label) =>
-            label.left >= frame.left &&
-            label.right <= frame.right &&
-            label.top >= frame.top &&
-            label.bottom <= frame.bottom,
-        ),
-        clear: labels.every((label) => blocks.every((block) => !overlaps(label, block))),
-      }
-    })
-  await expect.poll(placement).toEqual({ inside: true, clear: true })
+  await expectBuildingLabelsPlaced(page)
   await page.getByRole("button", { name: "Zoom out", exact: true }).click()
-  await expect.poll(() => names.getByRole("listitem").count()).toBeGreaterThan(0)
+  await expectBuildingLabelsPlaced(page)
 })
 
 test("keeps map marker colors stable when the interface theme changes", async ({ page }) => {
   await mockSession(page)
   await page.goto("/navigation")
-  const map = page.getByRole("application", { name: "Campus walking map" })
+  const map = page.getByRole("application", { name: "Campus route map" })
   await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
   const palette = () =>
     map.evaluate((viewport) =>
@@ -250,7 +301,7 @@ test("a real mobile map swipe pans without opening the sidebar", async ({ page }
   test.skip(info.project.name !== "mobile", "Requires a touch viewport")
   await mockSession(page)
   await page.goto("/navigation")
-  const map = page.getByRole("application", { name: "Campus walking map" })
+  const map = page.getByRole("application", { name: "Campus route map" })
   await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
   const canvas = map.locator("canvas")
   await canvas.scrollIntoViewIfNeeded()
@@ -304,7 +355,7 @@ test("takes the Chula Tunnel from MHMK to PINIT with an access-hours note", asyn
   await expect(navigation).toContainText("~7 min")
   await expect(navigation).toContainText("Uses a pedestrian tunnel.")
   await expect(navigation).toContainText("Opening hours and current access are unverified")
-  const map = page.getByRole("application", { name: "Campus walking map" })
+  const map = page.getByRole("application", { name: "Campus route map" })
   await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
   await expectRouteInView(page)
   await page.getByText("Buildings hide the route", { exact: true }).click()
@@ -315,5 +366,156 @@ test("takes the Chula Tunnel from MHMK to PINIT with an access-hours note", asyn
     path: `tmp/navigation-${info.project.name}-pinit-tunnel.png`,
     fullPage: true,
   })
+  expect(errors).toEqual([])
+})
+
+test("rotates through a full turn and bounds tilt with mouse and keyboard", async ({
+  page,
+}, info) => {
+  test.skip(info.project.name !== "desktop", "Requires a desktop pointer")
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  await mockSession(page)
+  await page.goto("/navigation")
+  const map = page.getByRole("application", { name: "Campus route map" })
+  await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
+  const north = page.getByRole("button", { name: "Point north", exact: true })
+  const tiltMore = page.getByRole("button", { name: "Tilt more", exact: true })
+  const tiltLess = page.getByRole("button", { name: "Tilt less", exact: true })
+  await expect(north).toBeVisible()
+  await expect(tiltMore).toBeEnabled()
+  await expect(tiltLess).toBeDisabled()
+  await expectHeading(page, 0)
+  const canvas = map.locator("canvas")
+  const bounds = await canvas.boundingBox()
+  if (!bounds) throw new Error("Map canvas has no layout bounds")
+  const rotate = async (dx: number, dy = 0) => {
+    const x = bounds.x + bounds.width / 3
+    const y = bounds.y + bounds.height / 2
+    await page.mouse.move(x, y)
+    await page.mouse.down({ button: "right" })
+    await page.mouse.move(x + dx, y + dy, { steps: 6 })
+    await page.mouse.up({ button: "right" })
+  }
+  for (const heading of [90, 180, 270, 0]) {
+    await rotate(300)
+    await expectHeading(page, heading)
+    await expectBuildingLabelsPlaced(page)
+  }
+  await rotate(150, 300)
+  await expectHeading(page, 45)
+  await expect.poll(async () => (await cameraAngles(page)).tilt).toBe(45)
+  await expect(tiltMore).toBeDisabled()
+  await expectBuildingLabelsPlaced(page)
+  await north.focus()
+  await page.keyboard.press("Enter")
+  await expectHeading(page, 0)
+  await expect.poll(async () => (await cameraAngles(page)).tilt).toBe(45)
+  await rotate(0, -300)
+  await expect.poll(async () => (await cameraAngles(page)).tilt).toBe(0)
+  await expect(tiltLess).toBeDisabled()
+  await map.focus()
+  for (let turn = 1; turn <= 24; turn += 1) {
+    await page.keyboard.press("Shift+ArrowRight")
+    if (turn % 6 === 0) await expectHeading(page, (turn * 15) % 360)
+  }
+  for (let step = 0; step < 5; step += 1) await page.keyboard.press("Shift+ArrowUp")
+  await expect.poll(async () => (await cameraAngles(page)).tilt).toBe(45)
+  await expect(tiltMore).toBeDisabled()
+  for (let step = 0; step < 5; step += 1) await page.keyboard.press("Shift+ArrowDown")
+  await expect.poll(async () => (await cameraAngles(page)).tilt).toBe(0)
+  await expect(tiltLess).toBeDisabled()
+  for (let step = 0; step < 3; step += 1) await page.keyboard.press("Shift+ArrowUp")
+  await page.keyboard.press("Shift+ArrowLeft")
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click()
+  await expectBuildingLabelsPlaced(page)
+  await map.focus()
+  await page.keyboard.press("ArrowRight")
+  await page.keyboard.press("ArrowDown")
+  await expectBuildingLabelsPlaced(page)
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }))
+  await page.screenshot({ path: "tmp/navigation-desktop-rotated.png", fullPage: true })
+  await page.getByRole("button", { name: "Show route", exact: true }).click()
+  await expect.poll(() => cameraAngles(page)).toEqual({ heading: 0, tilt: 0 })
+  await expectRouteInView(page)
+  await expectBuildingLabelsPlaced(page)
+  expect(errors).toEqual([])
+})
+
+test("rotates a full turn with two fingers and provides bounded touch tilt controls", async ({
+  page,
+}, info) => {
+  test.skip(info.project.name !== "mobile", "Requires a touch viewport")
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  await mockSession(page)
+  await page.goto("/navigation")
+  const map = page.getByRole("application", { name: "Campus route map" })
+  await expect(map).toHaveAttribute("aria-busy", "false", { timeout: 45000 })
+  const canvas = map.locator("canvas")
+  await canvas.scrollIntoViewIfNeeded()
+  const bounds = await canvas.boundingBox()
+  if (!bounds) throw new Error("Map canvas has no visible bounds")
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  const touch = await page.context().newCDPSession(page)
+  const points = (degrees: number, radius = 55) => {
+    const radians = (degrees * Math.PI) / 180
+    const dx = Math.cos(radians) * radius
+    const dy = Math.sin(radians) * radius
+    return [
+      { id: 1, x: center.x - dx, y: center.y - dy },
+      { id: 2, x: center.x + dx, y: center.y + dy },
+    ]
+  }
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points(0) })
+  for (let angle = 15; angle <= 360; angle += 15) {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: points(angle),
+    })
+    if (angle % 90 === 0) {
+      await expectHeading(page, (360 - angle) % 360)
+      await expectBuildingLabelsPlaced(page)
+    }
+  }
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+  const tiltMore = page.getByRole("button", { name: "Tilt more", exact: true })
+  const tiltLess = page.getByRole("button", { name: "Tilt less", exact: true })
+  await expect(tiltLess).toBeDisabled()
+  for (const tilt of [15, 30, 45]) {
+    await tiltMore.tap()
+    await expect.poll(async () => (await cameraAngles(page)).tilt).toBe(tilt)
+  }
+  await expect(tiltMore).toBeDisabled()
+  await expectBuildingLabelsPlaced(page)
+  await canvas.scrollIntoViewIfNeeded()
+  const tiltedBounds = await canvas.boundingBox()
+  if (!tiltedBounds) throw new Error("Tilted map canvas has no visible bounds")
+  center.x = tiltedBounds.x + tiltedBounds.width / 2
+  center.y = tiltedBounds.y + tiltedBounds.height / 2
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points(0) })
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: points(45, 75),
+  })
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+  await expectHeading(page, 315)
+  await expectBuildingLabelsPlaced(page)
+  await page.getByRole("button", { name: "Point north", exact: true }).tap()
+  await expectHeading(page, 0)
+  await expect.poll(async () => (await cameraAngles(page)).tilt).toBe(45)
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }))
+  await page.screenshot({ path: "tmp/navigation-mobile-tilted.png", fullPage: true })
+  for (const tilt of [30, 15, 0]) {
+    await tiltLess.tap()
+    await expect.poll(async () => (await cameraAngles(page)).tilt).toBe(tilt)
+  }
+  await expect(tiltLess).toBeDisabled()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await page.getByRole("button", { name: "Show route", exact: true }).tap()
+  await expect.poll(() => cameraAngles(page)).toEqual({ heading: 0, tilt: 0 })
+  await expectRouteInView(page)
+  await expectBuildingLabelsPlaced(page)
+  await touch.detach()
   expect(errors).toEqual([])
 })

@@ -130,14 +130,11 @@ describe("navigation page", () => {
     expect(screen.queryByText("Includes steps")).toBeNull()
     expect(screen.queryByText("Shared low-speed roads")).toBeNull()
   })
-  it("marks example mode and returns to actual schedule without persisting synthetic data", async () => {
+  it("shows only timetable routes without example controls", async () => {
     mount()
     await screen.findByText("~3 min")
-    fireEvent.click(screen.getByRole("button", { name: "Try MHMK M01 → TAB220" }))
-    expect(screen.getByText("Example route · not your timetable")).toBeVisible()
-    expect(screen.queryByText("About 11 min for walking")).toBeNull()
-    fireEvent.click(screen.getByRole("button", { name: "Back to my classes" }))
-    expect(screen.queryByText("Example route · not your timetable")).toBeNull()
+    expect(screen.queryByRole("button", { name: /Try MHMK|Back to my classes/ })).toBeNull()
+    expect(screen.queryByText(/example/i)).toBeNull()
     expect(screen.getByText("About 11 min for walking")).toBeVisible()
   })
   it("allows ten walking minutes for back-to-back classes", async () => {
@@ -170,15 +167,74 @@ describe("navigation page", () => {
     expect(await screen.findByText(/We have not mapped this building/)).toBeVisible()
     expect(screen.queryByText("~3 min")).toBeNull()
   })
-  it("shows empty state and allows a clearly labeled example", async () => {
+  it("shows an empty timetable without drawing a fictional route", async () => {
     scheduleMock.mockResolvedValue({ registrations: [] })
     mount()
-    expect(await screen.findByText(/No consecutive classes/)).toBeVisible()
+    expect(await screen.findByText("No consecutive classes in your timetable.")).toBeVisible()
+    expect(screen.queryByText(/example/i)).toBeNull()
+    expect(screen.queryByRole("button", { name: /Try MHMK|Back to my classes/ })).toBeNull()
+    expect(screen.queryByText("MHMK M01")).toBeNull()
+    expect(screen.queryByText("TAB 220")).toBeNull()
+    expect(screen.queryByText("~3 min")).toBeNull()
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Try MHMK M01 → TAB220" })).toBeEnabled(),
+      expect(mapPropsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ route: [], endpoints: [] }),
+      ),
     )
-    fireEvent.click(screen.getByRole("button", { name: "Try MHMK M01 → TAB220" }))
+  })
+  it.each([
+    [" ar ", "AR"],
+    ["", " ar "],
+  ])("shows an unspecified class location for building %j and room %j", async (building, room) => {
+    scheduleMock.mockResolvedValue({
+      registrations: [row(1, building, room, 540, 600), row(2, "TAB", "220", 601, 660)],
+    })
+    mount()
+    expect(await screen.findByText("Location not specified")).toBeVisible()
+    expect(
+      await screen.findByText("A class location is not specified. Confirm it with the faculty."),
+    ).toBeVisible()
+    expect(screen.queryByText("Building not yet mapped")).toBeNull()
+    expect(screen.queryByText(/We have not mapped this building/)).toBeNull()
+    await waitFor(() =>
+      expect(mapPropsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ route: [], endpoints: [] }),
+      ),
+    )
+  })
+  it("routes registered MATH classes through its mapped building", async () => {
+    const math = {
+      ...campus.buildings[0],
+      code: "MATH",
+      aliases: ["MATH"],
+      name: "Mathematics and Computer Science",
+      verifiedRooms: [],
+    }
+    scheduleMock.mockResolvedValue({
+      registrations: [row(1, "MATH", "301", 540, 600), row(2, "TAB", "220", 601, 660)],
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...campus, buildings: [math, campus.buildings[1]] }),
+      }),
+    )
+    mount()
     expect(await screen.findByText("~3 min")).toBeVisible()
+    expect(screen.getByText("MATH 301")).toBeVisible()
+    expect(screen.getByText("Mathematics and Computer Science")).toBeVisible()
+    await waitFor(() =>
+      expect(mapPropsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          route: campus.nodes,
+          endpoints: [
+            { ...campus.nodes[0], label: "MATH" },
+            { ...campus.nodes[1], label: "TAB" },
+          ],
+        }),
+      ),
+    )
   })
   it("handles disconnected topology without estimated straight-line routes", async () => {
     vi.stubGlobal(

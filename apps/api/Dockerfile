@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY apps/staff/package.json apps/staff/package.json
 COPY packages/appearance/package.json packages/appearance/package.json
 RUN bun install --frozen-lockfile --production --linker=hoisted
 

@@ -95,9 +95,9 @@ export function ManageRegistrationPage({ action }: { action: "drop" | "withdraw"
       })
   const consequence = isDrop
     ? text({
-        th: "เมื่อยืนยัน ระบบจะลดทุกรายวิชาที่เลือกและคืนที่นั่งของตอนเรียนในระบบตัวอย่าง",
-        en: "Confirmation drops every selected course and returns those demo seats.",
-        zh: "确认后将退选全部所选课程，并归还演示班次名额。",
+        th: "เมื่อยืนยัน ระบบจะลดทุกรายวิชาที่เลือกและคืนที่นั่งของตอนเรียน",
+        en: "Confirmation drops every selected course and returns its seat.",
+        zh: "确认后将退选全部所选课程，并归还班次名额。",
       })
     : text({
         th: "การสร้างแบบฟอร์มจะไม่เปลี่ยนสถานะลงทะเบียน ไม่คืนที่นั่ง และไม่ถือว่าอนุมัติการถอน",
@@ -320,13 +320,18 @@ export function ManageRegistrationPage({ action }: { action: "drop" | "withdraw"
         </Status>
       ) : null}
       {registrations.isError ? (
-        <Status tone="error">
-          {text({
-            th: "โหลดรายการลงทะเบียนไม่ได้ ลองรีเฟรชหน้าอีกครั้ง",
-            en: "Could not load registrations. Refresh the page and try again.",
-            zh: "无法加载选课记录。请刷新页面后重试。",
-          })}
-        </Status>
+        <>
+          <Status tone="error">
+            {text({
+              th: "โหลดรายการลงทะเบียนไม่ได้ โปรดลองอีกครั้ง",
+              en: "Could not load registrations. Please try again.",
+              zh: "无法加载选课记录，请重试。",
+            })}
+          </Status>
+          <Button loading={registrations.isFetching} onClick={() => void registrations.refetch()}>
+            {text({ th: "ลองอีกครั้ง", en: "Try again", zh: "重试" })}
+          </Button>
+        </>
       ) : null}
 
       <section
@@ -347,7 +352,7 @@ export function ManageRegistrationPage({ action }: { action: "drop" | "withdraw"
           </div>
         </header>
 
-        {active.length === 0 && !registrations.isPending ? (
+        {active.length === 0 && registrations.isSuccess ? (
           <div className={pageStyles.empty}>
             <CircleMinus aria-hidden="true" size={22} />
             <div>
@@ -446,9 +451,9 @@ export function ManageRegistrationPage({ action }: { action: "drop" | "withdraw"
                     {isDrop ? (
                       <span className={styles.courseConsequence}>
                         {text({
-                          th: "ลดแล้วคืนที่นั่งในระบบตัวอย่าง",
-                          en: "Drops and returns the demo seat",
-                          zh: "退选并归还演示名额",
+                          th: "ลดแล้วคืนที่นั่ง",
+                          en: "Drops and returns the seat",
+                          zh: "退选并归还名额",
                         })}
                       </span>
                     ) : (

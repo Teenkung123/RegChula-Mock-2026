@@ -1,5 +1,6 @@
+import { randomStudentId, test } from "./identity"
 import { readFile } from "node:fs/promises"
-import { expect, type Page, test } from "@playwright/test"
+import { expect, type Page } from "@playwright/test"
 
 const term = { id: 1, academicYear: 2569, semester: 1, current: true, label: "2569/1" }
 const courses = [
@@ -40,8 +41,8 @@ const courses = [
 async function login(page: Page) {
   await page.goto("/login")
   await expect(page.getByTestId("challenge-code")).toHaveText(/^\d{4}$/)
-  await page.getByLabel("รหัสนิสิต").fill(`ux-${crypto.randomUUID().slice(0, 8)}`)
-  await page.getByLabel("รหัสผ่าน").fill("local-test")
+  await page.getByLabel("รหัสนิสิต").fill(await randomStudentId())
+  await page.getByLabel("รหัสผ่าน").fill("12345678")
   await page
     .getByLabel("กรอกรหัสยืนยัน")
     .fill((await page.getByTestId("challenge-code").textContent())?.trim() ?? "")
@@ -135,7 +136,7 @@ test("compact layouts and exports stay readable across phone widths", async ({ p
   for (const width of [320, 375, 414, 768]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("/dashboard")
-    const scheduleLink = page.getByRole("link", { name: "ตารางเรียน", exact: true })
+    const scheduleLink = page.getByRole("link", { name: "ดูตารางทั้งหมด", exact: true })
     await expect(scheduleLink).toBeVisible()
     expect(
       await scheduleLink.evaluate((element) => {

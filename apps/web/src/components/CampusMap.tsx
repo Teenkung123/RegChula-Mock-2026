@@ -1,5 +1,13 @@
 import { Label, Switch } from "@heroui/react"
-import { Expand, Map as MapIcon, Minus, Plus, RotateCcw } from "lucide-react"
+import {
+  ChevronDown,
+  ChevronUp,
+  Expand,
+  Map as MapIcon,
+  Minus,
+  Plus,
+  RotateCcw,
+} from "lucide-react"
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import {
   ACESFilmicToneMapping,
@@ -34,12 +42,15 @@ import {
   createCampusBuildingLabelLayer,
 } from "./campus-building-label-layer"
 import {
-  applyNorthUpCamera,
+  applyMapCamera,
   clampMapView,
   fitMapView,
+  MAP_MAX_TILT,
   type MapBounds,
   type MapView,
-  panMapView,
+  mapOrientation,
+  panMapViewScreen,
+  rotateMapView,
   zoomMapView,
 } from "./campus-map-camera"
 import type { MapLabelRect } from "./campus-map-labels"
@@ -57,6 +68,9 @@ export interface CampusMapPoint {
 export interface CampusMapLabels {
   map: string
   north: string
+  resetNorth: string
+  tiltMore: string
+  tiltLess: string
   loading: string
   unavailable: string
   retry: string
@@ -80,8 +94,11 @@ export interface CampusMapProps {
 }
 
 const defaultLabels: CampusMapLabels = {
-  map: "North-up campus route map",
+  map: "Campus route map",
   north: "North",
+  resetNorth: "Point north",
+  tiltMore: "Tilt more",
+  tiltLess: "Tilt less",
   loading: "Loading the campus model…",
   unavailable: "The 3D map is unavailable. You can still use the route details on this page.",
   retry: "Try loading the map again",
@@ -93,7 +110,7 @@ const defaultLabels: CampusMapLabels = {
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   instructions:
-    "Drag or use arrow keys to move. Pinch, scroll or use +/− to zoom. North stays at the top.",
+    "Drag or arrows to move; pinch, scroll or +/− to zoom. Right-drag or Shift + arrows to rotate and tilt. Twist two fingers to rotate; use tilt buttons to change angle.",
 }
 
 type MapInput = Pick<CampusMapProps, "route" | "endpoints"> & {
@@ -108,6 +125,8 @@ type MapController = {
   setOcclusion: (active: boolean) => void
   reset: () => void
   zoom: (factor: number) => void
+  rotate: (yaw: number, tilt: number) => void
+  pointNorth: () => void
 }
 
 const modelUrl = `${import.meta.env.BASE_URL}campus/chula_detailed_v3_web.glb`
@@ -202,6 +221,7 @@ export function CampusMap({
   const [attempt, setAttempt] = useState(0)
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading")
   const [occlusion, setOcclusion] = useState(false)
+  const [orientation, setOrientation] = useState({ yaw: 0, tilt: 0 })
 
   useLayoutEffect(() => {
     // Model readiness mounts the controls; label placement needs their committed bounds.
@@ -261,8 +281,9 @@ export function CampusMap({
       { x: -700, y: -600 },
       { x: 700, y: 600 },
     ]
-    const pointers = new Map<number, { x: number; y: number }>()
-    let gesture: { x: number; y: number; distance: number } | null = null
+    const pointers = new Map<number, { x: number; y: number; orbit: boolean }>()
+    let gesture: { x: number; y: number; distance: number; angle: number; orbit: boolean } | null =
+      null
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75))
     renderer.outputColorSpace = SRGBColorSpace
     renderer.toneMapping = ACESFilmicToneMapping
@@ -290,8 +311,8 @@ export function CampusMap({
     function render() {
       frame = 0
       if (disposed || contextLost) return
-      view = clampMapView(view, groundBounds, width / height)
-      applyNorthUpCamera(camera, view, width / height, modelHeights)
+      view = clampMapView(view, groundBounds, width / height, modelHeights)
+      applyMapCamera(camera, view, width / height, modelHeights)
       try {
         renderer.render(scene, camera)
       } catch {
@@ -300,6 +321,12 @@ export function CampusMap({
         setStatus("unavailable")
         return
       }
+      const nextOrientation = mapOrientation(view)
+      setOrientation((current) =>
+        current.yaw === nextOrientation.yaw && current.tilt === nextOrientation.tilt
+          ? current
+          : nextOrientation,
+      )
       const blocked: MapLabelRect[] = []
       const viewportBounds = viewport.getBoundingClientRect()
       for (const control of viewport.parentElement?.querySelectorAll("[data-map-control]") ?? []) {
@@ -385,7 +412,12 @@ export function CampusMap({
 
     function fitView() {
       const points = [...input.route, ...input.endpoints].filter(isFinitePoint)
-      view = fitMapView(points.length ? points : defaultPoints, groundBounds, width / height)
+      view = fitMapView(
+        points.length ? points : defaultPoints,
+        groundBounds,
+        width / height,
+        modelHeights,
+      )
       invalidate()
     }
 
@@ -578,17 +610,18 @@ export function CampusMap({
 
     function zoom(factor: number, anchor = { x: 0.5, y: 0.5 }) {
       manualView = true
-      view = zoomMapView(view, factor, groundBounds, width / height, anchor)
+      view = zoomMapView(view, factor, groundBounds, width / height, anchor, modelHeights)
       invalidate()
     }
 
     function clearPointers() {
-      for (const pointerId of pointers.keys()) {
+      const pointerIds = [...pointers.keys()]
+      pointers.clear()
+      gesture = null
+      for (const pointerId of pointerIds) {
         if (renderer.domElement.hasPointerCapture(pointerId))
           renderer.domElement.releasePointerCapture(pointerId)
       }
-      pointers.clear()
-      gesture = null
     }
 
     function setMapInteractive(active: boolean) {
@@ -600,7 +633,13 @@ export function CampusMap({
 
     function pan(deltaX: number, deltaY: number) {
       manualView = true
-      view = panMapView(view, deltaX, deltaY, groundBounds, width / height)
+      view = panMapViewScreen(view, deltaX, deltaY, groundBounds, width / height, modelHeights)
+      invalidate()
+    }
+
+    function rotate(yaw: number, tilt: number) {
+      manualView = true
+      view = rotateMapView(view, yaw, tilt, groundBounds, width / height, modelHeights)
       invalidate()
     }
 
@@ -615,10 +654,17 @@ export function CampusMap({
         zoom(event.key === "-" ? 1.25 : 0.8)
       } else if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault()
-        const step = view.spanY * 0.08
+        if (event.shiftKey) {
+          rotate(
+            event.key === "ArrowLeft" ? -15 : event.key === "ArrowRight" ? 15 : 0,
+            event.key === "ArrowUp" ? 15 : event.key === "ArrowDown" ? -15 : 0,
+          )
+          return
+        }
         pan(
-          event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0,
-          event.key === "ArrowUp" ? step : event.key === "ArrowDown" ? -step : 0,
+          ((event.key === "ArrowLeft" ? -0.08 : event.key === "ArrowRight" ? 0.08 : 0) * height) /
+            width,
+          event.key === "ArrowUp" ? -0.08 : event.key === "ArrowDown" ? 0.08 : 0,
         )
       }
     }
@@ -633,15 +679,21 @@ export function CampusMap({
             x: (first.x + second.x) / 2,
             y: (first.y + second.y) / 2,
             distance: Math.hypot(second.x - first.x, second.y - first.y),
+            angle: Math.atan2(second.y - first.y, second.x - first.x),
+            orbit: false,
           }
-        : { ...first, distance: 0 }
+        : { ...first, distance: 0, angle: 0 }
     }
 
     function onPointerDown(event: PointerEvent) {
       if (!inputEnabled || (event.button !== 0 && event.button !== 2)) return
       event.preventDefault()
       viewport.focus({ preventScroll: true })
-      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      pointers.set(event.pointerId, {
+        x: event.clientX,
+        y: event.clientY,
+        orbit: event.button === 2,
+      })
       renderer.domElement.setPointerCapture(event.pointerId)
       gesture = currentGesture()
     }
@@ -649,12 +701,23 @@ export function CampusMap({
     function onPointerMove(event: PointerEvent) {
       if (!inputEnabled || !pointers.has(event.pointerId)) return
       event.preventDefault()
-      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      const previous = pointers.get(event.pointerId)
+      if (!previous) return
+      pointers.set(event.pointerId, { ...previous, x: event.clientX, y: event.clientY })
       const next = currentGesture()
       if (gesture && next) {
-        const metresPerPixel = view.spanY / height
-        pan(-(next.x - gesture.x) * metresPerPixel, (next.y - gesture.y) * metresPerPixel)
+        if (gesture.orbit && next.orbit) {
+          rotate((next.x - gesture.x) * 0.3, (next.y - gesture.y) * 0.2)
+        } else {
+          pan(-(next.x - gesture.x) / width, -(next.y - gesture.y) / height)
+        }
         if (gesture.distance > 0 && next.distance > 0) {
+          // atan2(sin, cos) unwraps the signed shortest twist across ±180°.
+          const twist = Math.atan2(
+            Math.sin(next.angle - gesture.angle),
+            Math.cos(next.angle - gesture.angle),
+          )
+          rotate((-twist * 180) / Math.PI, 0)
           const rect = renderer.domElement.getBoundingClientRect()
           zoom(gesture.distance / next.distance, {
             x: (next.x - rect.left) / width,
@@ -693,7 +756,7 @@ export function CampusMap({
       renderer.setSize(width, height, false)
       refreshOverlayLayout()
       if (!manualView) fitView()
-      else view = clampMapView(view, groundBounds, width / height)
+      else view = clampMapView(view, groundBounds, width / height, modelHeights)
       invalidate()
     }
 
@@ -739,6 +802,8 @@ export function CampusMap({
         fitView()
       },
       zoom,
+      rotate,
+      pointNorth: () => rotate(-mapOrientation(view).yaw, 0),
     }
     setMapInteractive(false)
     resize()
@@ -796,7 +861,7 @@ export function CampusMap({
             { x: campusBounds.min.x, y: -campusBounds.max.z },
             { x: campusBounds.max.x, y: -campusBounds.min.z },
           ]
-        view = clampMapView(view, groundBounds, width / height)
+        view = clampMapView(view, groundBounds, width / height, modelHeights)
         if (!manualView) fitView()
         setMapInteractive(true)
         setStatus("ready")
@@ -861,11 +926,37 @@ export function CampusMap({
         </div>
         {status === "ready" ? (
           <>
-            <span className={styles.north} role="img" aria-label={text.north} data-map-control>
-              <span aria-hidden="true">
+            <Button
+              className={styles.north ?? ""}
+              aria-label={text.resetNorth}
+              onPress={() => controllerRef.current?.pointNorth()}
+              data-map-control
+            >
+              <span
+                aria-hidden="true"
+                data-map-heading={orientation.yaw}
+                data-map-tilt={orientation.tilt}
+                style={{ transform: `rotate(${-orientation.yaw}deg)` }}
+              >
                 ↑<br />N
               </span>
-            </span>
+            </Button>
+            <div className={styles.tiltControls} data-map-control>
+              <Button
+                aria-label={text.tiltMore}
+                disabled={orientation.tilt >= MAP_MAX_TILT}
+                onPress={() => controllerRef.current?.rotate(0, 15)}
+              >
+                <ChevronUp size={18} aria-hidden="true" />
+              </Button>
+              <Button
+                aria-label={text.tiltLess}
+                disabled={orientation.tilt <= 0}
+                onPress={() => controllerRef.current?.rotate(0, -15)}
+              >
+                <ChevronDown size={18} aria-hidden="true" />
+              </Button>
+            </div>
             <div className={styles.toolbar}>
               <div className={styles.viewControls} data-map-control>
                 <Button aria-label={text.zoomIn} onPress={() => controllerRef.current?.zoom(0.8)}>

@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import {
   ArrowDown,
-  ArrowRight,
   ChevronDown,
   Clock3,
   Footprints,
@@ -34,8 +33,9 @@ import pageStyles from "./pages.module.css"
 const CampusMap = lazy(() =>
   import("../components/CampusMap").then((module) => ({ default: module.CampusMap })),
 )
+const campusBuildingIndexVersion = "building-crosswalk-v1"
 async function getCampusData(): Promise<CampusData> {
-  const response = await fetch("/campus/navigation-data.json")
+  const response = await fetch("/campus/navigation-data.json", { cache: "no-cache" })
   if (!response.ok) throw new Error("Campus map data could not be loaded")
   return response.json() as Promise<CampusData>
 }
@@ -46,13 +46,12 @@ export function NavigationPage() {
   const tr = (en: string, th: string, zh: string) => text({ en, th, zh })
   const schedule = useQuery({ queryKey: ["schedule"], queryFn: getSchedule })
   const campus = useQuery({
-    queryKey: ["campus-navigation"],
+    queryKey: ["campus-navigation", campusBuildingIndexVersion],
     queryFn: getCampusData,
     staleTime: Infinity,
   })
   const [selectedId, setSelectedId] = useState("")
   const [day, setDay] = useState("all")
-  const [example, setExample] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
   const transitions = useMemo(
     () => classTransitions(schedule.data?.registrations ?? []),
@@ -75,19 +74,8 @@ export function NavigationPage() {
       })),
     [campus.data, language],
   )
-  const sampleFrom: ClassStop = {
-    id: "sample-from",
-    courseCode: "",
-    name: "",
-    day: "",
-    start: 0,
-    end: 0,
-    building: "MHMK",
-    room: "M01",
-  }
-  const sampleTo: ClassStop = { ...sampleFrom, id: "sample-to", building: "TAB", room: "220" }
-  const from = example ? sampleFrom : selected?.from
-  const to = example ? sampleTo : selected?.to
+  const from = selected?.from
+  const to = selected?.to
   const origin =
     from && campus.data ? resolveBuilding(campus.data.buildings, from.building, from.room) : null
   const destination =
@@ -116,9 +104,13 @@ export function NavigationPage() {
       SA: tr("Saturday", "เสาร์", "周六"),
       SU: tr("Sunday", "อาทิตย์", "周日"),
     })[code] ?? code
+  const hasUnspecifiedLocation = (stop: ClassStop) =>
+    (stop.building.trim() || stop.room.trim()).toUpperCase() === "AR"
   const stopLabel = (stop: ClassStop) =>
-    [stop.building, stop.room].filter(Boolean).join(" ") ||
-    tr("Room not assigned", "ยังไม่ระบุห้อง", "教室未定")
+    hasUnspecifiedLocation(stop)
+      ? tr("Location not specified", "ยังไม่ระบุสถานที่", "地点未定")
+      : [stop.building, stop.room].filter(Boolean).join(" ") ||
+        tr("Room not assigned", "ยังไม่ระบุห้อง", "教室未定")
   const name = (building: CampusBuilding) =>
     language === "th" ? building.nameTh || building.name : building.name
   const stopCard = (stop: ClassStop, building: CampusBuilding | null, label: string) => {
@@ -135,26 +127,24 @@ export function NavigationPage() {
             <span className={styles.stopCaption}>
               {label === "A" ? tr("From", "จาก", "出发") : tr("To", "ไปยัง", "到达")}
             </span>
-            {!example && (
-              <time>
-                {label === "A" && selected
-                  ? `~${formatClassTime(selected.departureMinute)}`
-                  : formatClassTime(stop.start)}
-              </time>
-            )}
+            <time>
+              {label === "A" && selected
+                ? `~${formatClassTime(selected.departureMinute)}`
+                : formatClassTime(stop.start)}
+            </time>
           </div>
           <strong>{stopLabel(stop)}</strong>
-          <span>
-            {building
-              ? name(building)
-              : tr("Building not yet mapped", "ยังไม่มีตำแหน่งอาคารนี้", "该建筑尚未映射")}
-          </span>
-          {!example && (
-            <small>
-              {stop.courseCode} · {stop.name}
-            </small>
+          {!hasUnspecifiedLocation(stop) && (
+            <span>
+              {building
+                ? name(building)
+                : tr("Building not yet mapped", "ยังไม่มีตำแหน่งอาคารนี้", "该建筑尚未映射")}
+            </span>
           )}
-          {!example && label === "A" && (
+          <small>
+            {stop.courseCode} · {stop.name}
+          </small>
+          {label === "A" && (
             <small>
               {tr("Scheduled end", "เลิกตามตาราง", "计划下课")} {formatClassTime(stop.end)}
             </small>
@@ -171,7 +161,7 @@ export function NavigationPage() {
       </div>
     )
   }
-  const insufficient = !example && selected && route && selected.walkingMinutes < route.minutes
+  const insufficient = selected && route && selected.walkingMinutes < route.minutes
 
   return (
     <div className={pageStyles.page} data-testid="campus-navigation">
@@ -219,7 +209,6 @@ export function NavigationPage() {
                 onValueChange={(value) => {
                   setDay(value)
                   setSelectedId("")
-                  setExample(false)
                 }}
                 options={[
                   { value: "all", label: tr("All days", "ทุกวัน", "所有日期") },
@@ -232,7 +221,6 @@ export function NavigationPage() {
                   value={selected?.id ?? ""}
                   onValueChange={(value) => {
                     setSelectedId(value)
-                    setExample(false)
                   }}
                   options={visible.map((item) => ({
                     value: item.id,
@@ -241,23 +229,20 @@ export function NavigationPage() {
                 />
               ) : (
                 <p className={styles.empty}>
-                  {tr(
-                    "No consecutive classes on this day. Select another day or explore the example below.",
-                    "ไม่มีคาบเรียนต่อเนื่องในวันนี้ เลือกวันอื่นหรือดูเส้นทางตัวอย่างด้านล่าง",
-                    "当天没有连续课程。请选择其他日期，或查看下方示例。",
-                  )}
+                  {day === "all"
+                    ? tr(
+                        "No consecutive classes in your timetable.",
+                        "ยังไม่มีคาบเรียนต่อเนื่องในตารางเรียน",
+                        "课程表中没有连续课程。",
+                      )
+                    : tr(
+                        "No consecutive classes on this day. Select another day.",
+                        "ไม่มีคาบเรียนต่อเนื่องในวันนี้ ลองเลือกวันอื่น",
+                        "当天没有连续课程，请选择其他日期。",
+                      )}
                 </p>
               )}
             </>
-          )}
-          {example && (
-            <span className={styles.example}>
-              {tr(
-                "Example route · not your timetable",
-                "เส้นทางตัวอย่าง · ไม่ใช่ตารางเรียนของคุณ",
-                "示例路线 · 非个人课程表",
-              )}
-            </span>
           )}
           {from && to && (
             <div className={styles.stops}>
@@ -266,7 +251,7 @@ export function NavigationPage() {
               {stopCard(to, destination, "B")}
             </div>
           )}
-          {!example && selected && (
+          {selected && (
             <div className={styles.walkingWindow}>
               <p className={insufficient ? styles.warning : styles.gap}>
                 <Clock3 size={17} aria-hidden="true" />
@@ -322,6 +307,14 @@ export function NavigationPage() {
               </>
             ) : campus.isPending ? (
               <PageLoading />
+            ) : from && to && (hasUnspecifiedLocation(from) || hasUnspecifiedLocation(to)) ? (
+              <Status>
+                {tr(
+                  "A class location is not specified. Confirm it with the faculty.",
+                  "ยังไม่ระบุสถานที่เรียน โปรดตรวจสอบกับคณะ",
+                  "课程地点未定，请向院系确认。",
+                )}
+              </Status>
             ) : from && to && (!origin || !destination) ? (
               <Status>
                 {tr(
@@ -384,23 +377,6 @@ export function NavigationPage() {
               </>
             ) : null}
           </div>
-          <div className={styles.exampleAction}>
-            <Button
-              variant="quiet"
-              onClick={() => setExample(!example)}
-              disabled={!campus.data}
-              aria-pressed={example}
-            >
-              {example
-                ? tr("Back to my classes", "กลับไปยังตารางของฉัน", "返回我的课程")
-                : tr(
-                    "Try MHMK M01 → TAB220",
-                    "ดูตัวอย่าง MHMK M01 → TAB220",
-                    "示例 MHMK M01 → TAB220",
-                  )}
-              <ArrowRight size={16} aria-hidden="true" />
-            </Button>
-          </div>
         </section>
         <section
           className={styles.mapPanel}
@@ -421,7 +397,10 @@ export function NavigationPage() {
               language={language}
               labels={{
                 north: tr("North", "ทิศเหนือ", "北"),
-                map: tr("Campus walking map", "แผนที่เส้นทางเดิน", "校园步行地图"),
+                resetNorth: tr("Point north", "หันไปทิศเหนือ", "朝北"),
+                tiltMore: tr("Tilt more", "เพิ่มมุมเอียง", "增大倾角"),
+                tiltLess: tr("Tilt less", "ลดมุมเอียง", "减小倾角"),
+                map: tr("Campus route map", "แผนที่เส้นทางเดิน", "校园路线地图"),
                 loading: tr("Loading the map…", "กำลังโหลดแผนที่…", "正在加载地图…"),
                 unavailable: tr(
                   "The map could not be loaded. You can still view your route details.",
@@ -437,9 +416,9 @@ export function NavigationPage() {
                 zoomIn: tr("Zoom in", "ซูมเข้า", "放大"),
                 zoomOut: tr("Zoom out", "ซูมออก", "缩小"),
                 instructions: tr(
-                  "Drag to move. Pinch or +/− to zoom. Use arrow keys when the map is focused.",
-                  "ลากเพื่อเลื่อน ใช้สองนิ้วหรือ +/− เพื่อซูม ใช้ปุ่มลูกศรเมื่อโฟกัสแผนที่",
-                  "拖动移动，双指或 +/− 缩放。聚焦地图后可使用方向键。",
+                  "Drag or arrows to move; pinch, scroll or +/− to zoom. Right-drag or Shift + arrows to rotate and tilt. Twist two fingers to rotate; use tilt buttons to change angle.",
+                  "ลากหรือกดลูกศรเพื่อเลื่อน จีบ เลื่อนล้อเมาส์ หรือกด +/− เพื่อซูม ลากด้วยปุ่มเมาส์ขวาหรือ Shift + ลูกศรเพื่อหมุนและเอียง ใช้สองนิ้วบิดเพื่อหมุน และปุ่มมุมเอียงเพื่อปรับมุมมอง",
+                  "拖动或按方向键移动；双指捏合、滚轮或 +/− 缩放。右键拖动或 Shift + 方向键旋转和倾斜。双指扭转可旋转，倾角按钮可调整角度。",
                 ),
               }}
             />

@@ -21,6 +21,7 @@ describe("runtime configuration", () => {
     })
     expect(value.webOrigins).toEqual([
       "http://localhost:5173",
+      "http://localhost:5174",
       "http://192.168.1.115:5173",
       "http://100.88.122.114:5173",
     ])

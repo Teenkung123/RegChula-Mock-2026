@@ -4,6 +4,7 @@ coverage/
 playwright-report/
 test-results/
 # Local credentials; only the documented template belongs in Git.
+artillery.txt
 .env
 .env.*
 !.env.example

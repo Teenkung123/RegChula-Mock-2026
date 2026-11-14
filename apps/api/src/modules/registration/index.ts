@@ -1,4 +1,6 @@
 import { Elysia, t } from "elysia"
+import { pool } from "../../db/client"
+import { runTransaction } from "../../db/transaction"
 import { originIsAllowed } from "../../shared/http"
 import { appProblem } from "../../shared/problem"
 import {
@@ -7,6 +9,7 @@ import {
   type SessionCookieJar,
 } from "../../shared/session"
 import { renderWithdrawalPdf } from "../withdrawal/pdf"
+import { grantRegistrationAccess, registrationAccess } from "./access"
 import {
   batchDropPreview,
   commitBatchDrop,
@@ -52,6 +55,30 @@ const registrationChoice = t.Object({
 })
 
 export const registrationModule = new Elysia({ name: "registration" })
+  .get("/api/v1/registration-access", { cookie: sessionCookieSchema }, async ({ cookie, request, set }) => {
+    set.headers["cache-control"] = "no-store"
+    const studentId = await requireStudent(cookie as SessionCookieJar, request)
+    if (typeof studentId !== "string") return studentId
+    const connection = await pool.getConnection()
+    try { return { data: await registrationAccess(connection, studentId) } }
+    finally { connection.release() }
+  })
+  .post("/api/v1/registration-access", {
+    cookie: sessionCookieSchema,
+    body: t.Object({ code: t.String({ minLength: 1, maxLength: 64 }) }),
+  }, async ({ cookie, request, body, set }) => {
+    set.headers["cache-control"] = "no-store"
+    const studentId = await requireStudent(cookie as SessionCookieJar, request)
+    if (typeof studentId !== "string") return studentId
+    const originProblem = mutationAllowed(request)
+    if (originProblem) return originProblem
+    const access = await runTransaction(async (tx) => {
+      const value = await grantRegistrationAccess(tx, studentId, body.code)
+      return { commit: value?.authorized === true, value }
+    })
+    if (!access) return appProblem(request, 409, "REGISTRATION_CODE_INVALID", "รหัสลงทะเบียนไม่ถูกต้อง", "ตรวจสอบรหัสกับอาจารย์ที่ปรึกษาแล้วลองอีกครั้ง")
+    return { data: access }
+  })
   .get(
     "/api/v1/registrations",
     {

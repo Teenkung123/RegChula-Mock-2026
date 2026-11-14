@@ -227,6 +227,10 @@
   flex: 0 0 auto;
 }
 
+.conflictBadge {
+  background-color: var(--color-error-soft);
+}
+
 .courseSection {
   display: grid;
   min-width: 0;

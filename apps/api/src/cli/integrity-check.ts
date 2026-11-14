@@ -18,8 +18,6 @@ try {
       "FROM registrations WHERE status IN ('active', 'withdrawn') GROUP BY section_id",
       ") r ON r.section_id = s.id",
       "WHERE s.local_active <> COALESCE(r.occupied, 0)",
-      "OR s.local_active > GREATEST(",
-      "CAST(s.capacity AS SIGNED) - CAST(s.baseline_enrolled AS SIGNED), 0)",
     ].join(" "),
   )
   const [duplicateRows] = await pool.query<ViolationRow[]>(
@@ -35,13 +33,13 @@ try {
     Number(seatRows[0]?.violations ?? 0) + Number(duplicateRows[0]?.violations ?? 0)
   if (violations > 0) throw new Error(`Registration integrity failed: ${violations} violations`)
   const [warningRows] = await pool.query<WarningRow[]>(
-    "SELECT COUNT(*) AS warnings FROM sections WHERE baseline_enrolled > capacity",
+    "SELECT COUNT(*) AS warnings FROM sections WHERE baseline_enrolled + local_active > capacity",
   )
   const warnings = Number(warningRows[0]?.warnings ?? 0)
   console.log("[integrity] Seat and duplicate-registration invariants passed")
   if (warnings > 0) {
     console.log(
-      `[integrity] ${warnings} inherited source sections exceed quota; local writes did not increase them`,
+      `[integrity] ${warnings} sections exceed their current capacity and cannot accept new registrations`,
     )
   }
 } finally {

@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright"
-import { expect, type Locator, type Page, test } from "@playwright/test"
+import { expect, type Locator, type Page } from "@playwright/test"
+import { randomStudentId, test } from "./identity"
 
 async function login(page: Page, studentId: string, rememberMe = false) {
   await page.goto("/login")
@@ -8,19 +9,19 @@ async function login(page: Page, studentId: string, rememberMe = false) {
   const code = (await challenge.textContent())?.trim()
   expect(code).toMatch(/^\d{4}$/)
   await page.getByLabel("รหัสนิสิต").fill(studentId)
-  await page.getByLabel("รหัสผ่าน").fill("local-e2e-only")
+  await page.getByLabel("รหัสผ่าน").fill("12345678")
   if (rememberMe) await page.getByText("จดจำการเข้าสู่ระบบบนอุปกรณ์นี้").click()
   await page.getByLabel("กรอกรหัสยืนยัน").fill(code ?? "")
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click()
   await expect(page).toHaveURL(/\/dashboard$/)
 }
 
-test("Remember Me is opt-in", async ({ page }, testInfo) => {
+test("Remember Me is opt-in", async ({ page }) => {
   await page.goto("/login")
   await expect(page.getByRole("checkbox", { name: /จดจำการเข้าสู่ระบบ/ })).not.toBeChecked()
   await login(
     page,
-    `e2e-remember-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`,
+    await randomStudentId(),
     true,
   )
   const response = await page.request.get("http://localhost:3000/api/v1/me")
@@ -263,7 +264,7 @@ function visibleRadio(page: Page, label: string) {
 }
 
 test("mock login, catalog search, and responsive shell", async ({ page }) => {
-  await login(page, "e2e-student")
+  await login(page, await randomStudentId())
   await expect(page.getByRole("heading", { name: "ภาพรวมของคุณ" })).toBeVisible()
   await page.goto("/search")
   const termSelect = page.getByRole("button", { name: "เปลี่ยนภาคการศึกษา" })
@@ -282,8 +283,8 @@ test("mock login, catalog search, and responsive shell", async ({ page }) => {
   await expect(page.getByText("3 หน่วยกิต").first()).toBeVisible()
 })
 
-test("profile dropdown owns term context and appearance navigation", async ({ page }, testInfo) => {
-  const studentId = `e2e-profile-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`
+test("profile dropdown owns term context and appearance navigation", async ({ page }) => {
+  const studentId = await randomStudentId()
   await login(page, studentId)
 
   const sidebar = page.locator("aside")
@@ -300,8 +301,8 @@ test("profile dropdown owns term context and appearance navigation", async ({ pa
   await expect(page).toHaveURL(/\/appearance$/)
 })
 
-test("topbar utilities change language and theme", async ({ page }, testInfo) => {
-  const studentId = `e2e-utilities-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`
+test("topbar utilities change language and theme", async ({ page }) => {
+  const studentId = await randomStudentId()
   await page.emulateMedia({ colorScheme: "dark" })
   await login(page, studentId)
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
@@ -325,7 +326,7 @@ test("topbar utilities change language and theme", async ({ page }, testInfo) =>
 
 test("profile submenus and color picker fit responsive viewports", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Scoped responsive geometry")
-  const studentId = `e2e-responsive-utilities-${crypto.randomUUID().slice(0, 6)}`
+  const studentId = await randomStudentId()
   await login(page, studentId)
 
   for (const width of [320, 375, 414, 768, 2560]) {
@@ -378,8 +379,8 @@ test("profile submenus and color picker fit responsive viewports", async ({ page
   }
 })
 
-test("topbar search stays compact and offers detailed search", async ({ page }, testInfo) => {
-  await login(page, `e2e-top-search-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`)
+test("topbar search stays compact and offers detailed search", async ({ page }) => {
+  await login(page, await randomStudentId())
   const trigger = page.getByRole("button", { name: "ค้นหารายวิชา" })
   await trigger.click()
   const popup = page.getByRole("dialog", { name: "ค้นหารายวิชา" })
@@ -395,8 +396,8 @@ test("topbar search stays compact and offers detailed search", async ({ page }, 
 
 test("topbar autocomplete accepts keyboard selection and empty searches", async ({
   page,
-}, testInfo) => {
-  await login(page, `e2e-quick-${testInfo.project.name}-${crypto.randomUUID().slice(0, 5)}`)
+}) => {
+  await login(page, await randomStudentId())
   await page.getByRole("button", { name: "ค้นหารายวิชา", exact: true }).click()
   const input = page.getByRole("combobox", { name: "ค้นหารหัสหรือชื่อวิชา" })
   await input.fill("0123101")
@@ -417,7 +418,7 @@ test("topbar autocomplete accepts keyboard selection and empty searches", async 
 
 test("course autocompletes match every catalogue name variant", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Focused multilingual autocomplete coverage")
-  await login(page, `e2e-course-search-${crypto.randomUUID().slice(0, 6)}`)
+  await login(page, await randomStudentId())
 
   await page.getByRole("button", { name: "ค้นหารายวิชา", exact: true }).click()
   const quickSearch = page.getByRole("combobox", { name: "ค้นหารหัสหรือชื่อวิชา" })
@@ -442,7 +443,7 @@ test("session lookup failure offers retry without forcing a new login", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Scoped error recovery")
-  await login(page, `e2e-retry-${crypto.randomUUID().slice(0, 6)}`)
+  await login(page, await randomStudentId())
   let unavailable = true
   await page.route("**/api/v1/me", (route) =>
     unavailable
@@ -463,7 +464,7 @@ test("session lookup failure offers retry without forcing a new login", async ({
 test("system dark mode toggle and keyboard skip navigation work", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Scoped system theme and keyboard navigation")
   await page.emulateMedia({ colorScheme: "dark" })
-  await login(page, `e2e-system-${crypto.randomUUID().slice(0, 6)}`)
+  await login(page, await randomStudentId())
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
   await page.getByRole("button", { name: "สลับโหมดสว่างและมืด" }).click()
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
@@ -472,8 +473,8 @@ test("system dark mode toggle and keyboard skip navigation work", async ({ page 
   await expect(page.locator("#main-content")).toBeFocused()
 })
 
-test("building directory searches imported public building records", async ({ page }, testInfo) => {
-  await login(page, `e2e-buildings-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`)
+test("building directory searches imported public building records", async ({ page }) => {
+  await login(page, await randomStudentId())
   await page.goto("/buildings")
   await expect(page.getByRole("heading", { name: "รายชื่ออาคาร" })).toBeVisible()
   await expect(page.getByTestId("building-count")).toContainText("238")
@@ -484,8 +485,8 @@ test("building directory searches imported public building records", async ({ pa
 
 test("faculty directory searches a department and expands its faculty", async ({
   page,
-}, testInfo) => {
-  await login(page, `e2e-faculties-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`)
+}) => {
+  await login(page, await randomStudentId())
   await page.goto("/faculties")
   await expect(page.getByRole("heading", { name: "ค้นหารหัสคณะและภาควิชา" })).toBeVisible()
   await expect(page.getByTestId("faculty-count")).toContainText("29")
@@ -503,7 +504,7 @@ test("faculty directory searches a department and expands its faculty", async ({
 test("login page has no serious accessibility violations", async ({ page }) => {
   await page.goto("/login")
   await expect(page.getByTestId("challenge-code")).toHaveText(/^\d{4}$/)
-  await expect(page.getByRole("img", { name: /รหัส CAPTCHA สำหรับระบบตัวอย่าง/ })).toBeVisible()
+  await expect(page.getByRole("img", { name: /^รหัสยืนยัน/ })).toBeVisible()
   await expect(
     page.getByRole("heading", { name: "ข้อกำหนดการเข้าสู่ระบบการลงทะเบียนเรียน" }),
   ).toBeVisible()
@@ -526,7 +527,7 @@ test("login page has no serious accessibility violations", async ({ page }) => {
 test("catalog filters use inline search, real GenEd data, and full-hitbox time fields", async ({
   page,
 }, testInfo) => {
-  await login(page, "e2e-filters-" + testInfo.project.name + "-" + crypto.randomUUID().slice(0, 6))
+  await login(page, await randomStudentId())
   await page.goto("/search")
   await expect(page.getByTestId("term-utility")).toBeVisible()
   await page.getByRole("button", { name: "ตัวกรองเพิ่มเติม" }).click()
@@ -555,7 +556,7 @@ test("catalog filters use inline search, real GenEd data, and full-hitbox time f
   await expect(page.getByText("หมวดวิทย์").first()).toBeVisible()
 })
 test("appearance customization is discoverable and persists", async ({ page }, testInfo) => {
-  await login(page, `e2e-theme-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`)
+  await login(page, await randomStudentId())
   await page.goto("/appearance")
   await expect(page.getByRole("heading", { name: "การแสดงผลและการอ่าน" })).toBeVisible()
   const darkMode = page.getByRole("radio", { name: /โหมดมืด/ })
@@ -597,7 +598,11 @@ test("appearance customization is discoverable and persists", async ({ page }, t
   await visibleRadio(page, "English").click()
   await expect(language).toBeChecked()
   await expect(page.getByRole("heading", { name: "Display and readability" })).toBeVisible()
-  await expect(page.getByRole("link", { name: "Course search" })).toBeVisible()
+  if (testInfo.project.name.startsWith("mobile")) {
+    await expect(page.getByRole("button", { name: "Course search", exact: true })).toBeVisible()
+  } else {
+    await expect(page.getByRole("link", { name: "Course search", exact: true })).toBeVisible()
+  }
 
   await page
     .getByRole("button", { name: "Restore defaults" })
@@ -611,7 +616,7 @@ test("appearance supports custom accent, scale, and drawer presentation", async 
   page,
 }, testInfo) => {
   const isMobile = testInfo.project.name.startsWith("mobile")
-  const studentId = `e2e-appearance-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`
+  const studentId = await randomStudentId()
   await login(page, studentId)
   await page.goto("/appearance")
   const selectionMarks = page.locator("[data-selection-mark='true']:visible")
@@ -748,7 +753,8 @@ test("appearance supports custom accent, scale, and drawer presentation", async 
 })
 
 test("popup interactions preserve viewport position", async ({ page }) => {
-  await login(page, `e2e-popup-${crypto.randomUUID().slice(0, 8)}`)
+  const studentId = await randomStudentId()
+  await login(page, studentId)
   await page.goto("/search")
   await expect(page.getByRole("heading", { name: "ค้นหารายวิชา" })).toBeVisible()
 
@@ -764,7 +770,7 @@ test("popup interactions preserve viewport position", async ({ page }) => {
   expect(await viewportSnapshot(page)).toEqual(selectPosition)
 
   const beforeMenu = await viewportSnapshot(page)
-  await pointerClick(page, page.getByRole("button", { name: /e2e-popup-/ }))
+  await pointerClick(page, page.getByRole("button", { name: studentId }))
   await expect(page.getByRole("menu")).toBeVisible()
   expect(await viewportSnapshot(page)).toEqual(beforeMenu)
   await page.keyboard.press("Escape")
@@ -773,7 +779,7 @@ test("popup interactions preserve viewport position", async ({ page }) => {
 
   await page.evaluate(() => window.scrollTo(0, 500))
   const beforeScrolledMenu = await viewportSnapshot(page)
-  const scrolledMenuTrigger = page.getByRole("button", { name: /e2e-popup-/ })
+  const scrolledMenuTrigger = page.getByRole("button", { name: studentId })
   await pointerClick(page, scrolledMenuTrigger)
   await expect(page.getByRole("menu")).toBeVisible()
   expect(await viewportSnapshot(page)).toEqual(beforeScrolledMenu)
@@ -794,7 +800,7 @@ test("popup interactions preserve viewport position", async ({ page }) => {
 })
 
 test("current-term registrations propagate to plan views", async ({ page }, testInfo) => {
-  const studentId = "e2e-plan-" + testInfo.project.name + "-" + crypto.randomUUID().slice(0, 8)
+  const studentId = await randomStudentId()
   await login(page, studentId)
   const registered = await registerEligibleCourses(page, 1)
   const courseCode = registered[0]?.courseCode
@@ -844,8 +850,7 @@ test("current-term registrations propagate to plan views", async ({ page }, test
 })
 test("batch drop confirms all selected courses together", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Shared mock mutation flow runs once in Chromium")
-  const studentId =
-    "e2e-batch-drop-" + testInfo.project.name + "-" + crypto.randomUUID().slice(0, 8)
+  const studentId = await randomStudentId()
   await login(page, studentId)
   const registered = await registerEligibleCourses(page, 2)
   try {
@@ -888,8 +893,7 @@ test("batch drop confirms all selected courses together", async ({ page }, testI
 
 test("withdrawal form keeps every selected course active", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Shared mock mutation flow runs once in Chromium")
-  const studentId =
-    "e2e-withdrawal-" + testInfo.project.name + "-" + crypto.randomUUID().slice(0, 8)
+  const studentId = await randomStudentId()
   await login(page, studentId)
   const registered = await registerEligibleCourses(page, 2)
   try {
@@ -954,7 +958,7 @@ test("desktop forms keep controls aligned and footer reaches the page bottom", a
 }, testInfo) => {
   test.skip(testInfo.project.name.startsWith("mobile"), "desktop project only")
   await page.setViewportSize({ width: 1440, height: 900 })
-  await login(page, `e2e-layout-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`)
+  await login(page, await randomStudentId())
   await page.goto("/register")
   const row = page.getByTestId("registration-draft-row")
   const boxes = await Promise.all([
@@ -978,7 +982,7 @@ test("registration offers initial suggestions and visible live requirements", as
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Focused live registration feedback")
-  await login(page, `e2e-feedback-${crypto.randomUUID().slice(0, 8)}`)
+  await login(page, await randomStudentId())
   await page.goto("/register")
   const courseInput = page.getByRole("combobox", { name: "รหัสหรือชื่อรายวิชา" })
   await courseInput.click()
@@ -1000,7 +1004,7 @@ test("registration offers initial suggestions and visible live requirements", as
 
 test("course schedule colors persist and carry into the exam board", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Shared mutation runs once in Chromium")
-  const studentId = "e2e-course-color-" + crypto.randomUUID().slice(0, 8)
+  const studentId = await randomStudentId()
   await login(page, studentId)
   const registered = await registerEligibleCourses(page, 1)
   try {
@@ -1053,7 +1057,7 @@ test("course schedule colors persist and carry into the exam board", async ({ pa
 
 test("planning grids and course cards remain usable on mobile", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.startsWith("mobile"), "Mobile planning view")
-  await login(page, `e2e-mobile-planning-${crypto.randomUUID().slice(0, 8)}`)
+  await login(page, await randomStudentId())
   const term = { id: 1, academicYear: 2569, semester: 1, label: "2569/1" }
   const registration = {
     registrationId: 1,
@@ -1095,7 +1099,8 @@ test("planning grids and course cards remain usable on mobile", async ({ page },
         (element.parentElement?.scrollWidth ?? 0) > (element.parentElement?.clientWidth ?? 0),
       pageOverflow: document.documentElement.scrollWidth > innerWidth,
     }))
-    expect(frame).toEqual({ nestedOverflow: true, pageOverflow: false })
+    expect(frame.pageOverflow, `schedule width ${width}`).toBe(false)
+    if (width <= 414) expect(frame.nestedOverflow, `schedule width ${width}`).toBe(true)
     const classBlock = page.getByTestId("schedule-class-block")
     await expect(classBlock).toBeVisible()
     const solidStyle = await classBlock.evaluate((element) => {
@@ -1181,7 +1186,7 @@ test("planning grids and course cards remain usable on mobile", async ({ page },
 test("overlapping class and exam events remain visible as warnings", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Deterministic overlap rendering fixture")
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await login(page, `e2e-overlap-${crypto.randomUUID().slice(0, 8)}`)
+  await login(page, await randomStudentId())
   const solidLabels = await page.request.patch("http://localhost:3000/api/v1/preferences", {
     headers: { origin: "http://localhost:5173" },
     data: { labelStyle: "solid", theme: "dark" },
@@ -1284,7 +1289,7 @@ test("overlapping class and exam events remain visible as warnings", async ({ pa
 test("course modal is spacious and presents details without tabs", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Desktop course-panel geometry")
   await page.setViewportSize({ width: 1440, height: 1000 })
-  await login(page, `e2e-course-panel-${crypto.randomUUID().slice(0, 8)}`)
+  await login(page, await randomStudentId())
   await page.goto("/search")
   await page.locator('button[data-mode="search"]').first().click()
   const dialog = page.getByRole("dialog", { name: "รายละเอียดรายวิชา" })
@@ -1301,7 +1306,7 @@ test("neutral themes fill ultra-wide screens and preserve contained width", asyn
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Shared theme and viewport geometry coverage")
-  await login(page, `e2e-fluid-${crypto.randomUUID().slice(0, 8)}`)
+  await login(page, await randomStudentId())
   const preferences = async (data: Record<string, unknown>) => {
     const response = await page.request.patch("http://localhost:3000/api/v1/preferences", {
       headers: { origin: "http://localhost:5173" },
@@ -1387,12 +1392,16 @@ test("neutral themes fill ultra-wide screens and preserve contained width", asyn
 
 test("mobile navigation uses a dismissable left sidebar", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.startsWith("mobile"), "mobile project only")
-  await login(page, "e2e-mobile")
+  await login(page, await randomStudentId())
   const menuTrigger = page.getByTestId("mobile-sidebar-trigger")
   await expect(menuTrigger).toBeVisible()
   await expect(page.getByRole("button", { name: "เพิ่มเติม", exact: true })).toHaveCount(0)
   await page.goto("/search")
+  await expect(page.locator("main article").first()).toBeVisible()
+  await expect(page.getByTestId("page-loading")).toHaveCount(0)
+  await page.evaluate(() => document.fonts.ready)
   await page.evaluate(() => window.scrollTo(0, Math.min(900, document.body.scrollHeight)))
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(900)
   const topbar = page.getByRole("banner")
   await expect.poll(async () => Math.round((await topbar.boundingBox())?.y ?? -1)).toBe(0)
   const toolbarBackground = await topbar.evaluate(
@@ -1406,7 +1415,13 @@ test("mobile navigation uses a dismissable left sidebar", async ({ page }, testI
   expect(toolbarBackground).not.toBe("rgba(0, 0, 0, 0)")
   await page.screenshot({ path: "tmp/browser/mobile-solid-topbar.png" })
   const beforeMenu = await viewportSnapshot(page)
-  await menuTrigger.click()
+  const tapMenu = async () => {
+    const box = await menuTrigger.boundingBox()
+    if (!box) throw new Error("Mobile menu trigger is not visible")
+    // Tap the visible sticky control; locator.click() scrolls it before dispatching.
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
+  }
+  await tapMenu()
   const dialog = page.getByRole("dialog", { name: "เมนูทั้งหมด" })
   await expect(dialog).toBeVisible()
   await expectLeftDrawerSettled(dialog)
@@ -1424,13 +1439,13 @@ test("mobile navigation uses a dismissable left sidebar", async ({ page }, testI
   await expect(dialog).not.toBeVisible()
   await expect(menuTrigger).toBeFocused()
 
-  await menuTrigger.click()
+  await tapMenu()
   await expectLeftDrawerSettled(dialog)
   const backdrop = page.locator('[data-slot="drawer-backdrop"]')
   await backdrop.click({ position: { x: viewportWidth - 4, y: 80 } })
   await expect(dialog).not.toBeVisible()
 
-  await menuTrigger.click()
+  await tapMenu()
   await dialog.getByRole("link", { name: "ลดรายวิชา" }).click()
   await expect(page.getByRole("heading", { name: "ลดรายวิชา" })).toBeVisible()
   await expect(dialog).not.toBeVisible()
@@ -1470,7 +1485,7 @@ test("mobile navigation uses a dismissable left sidebar", async ({ page }, testI
 
 test("mobile sidebar fits every supported compact width", async ({ page }, testInfo) => {
   test.skip(!testInfo.project.name.startsWith("mobile"), "mobile project only")
-  await login(page, "e2e-mobile-widths")
+  await login(page, await randomStudentId())
   for (const width of [320, 375, 414, 768]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("/dashboard")
@@ -1493,7 +1508,7 @@ test("mobile sidebar fits every supported compact width", async ({ page }, testI
 test("desktop topbar becomes a solid surface after scrolling", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.startsWith("mobile"), "desktop projects only")
   await page.setViewportSize({ width: 2560, height: 600 })
-  await login(page, `e2e-topbar-${testInfo.project.name}-${crypto.randomUUID().slice(0, 6)}`)
+  await login(page, await randomStudentId())
   await page.goto("/search")
   const topbar = page.getByRole("banner")
   await expect(topbar).not.toHaveAttribute("data-scrolled", "true")

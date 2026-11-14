@@ -78,6 +78,41 @@
       "when": 1788820000000,
       "tag": "0010_personal_planning",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1788820001000,
+      "tag": "0011_staff_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1788820002000,
+      "tag": "0012_student_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1788820003000,
+      "tag": "0013_admin_enrollment",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1788820004000,
+      "tag": "0014_staff_terms",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "5",
+      "when": 1788820005000,
+      "tag": "0015_registration_codes",
+      "breakpoints": true
     }
   ]
 }

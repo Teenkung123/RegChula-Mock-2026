@@ -53,7 +53,7 @@ export interface CourseExams {
 export interface ExistingRegistration {
   registrationId: number
   courseCode: string
-  status: "active" | "dropped" | "withdrawn"
+  status: "active" | "dropped" | "withdrawn" | "removed"
   credits: number
   meetings: MeetingSlot[]
   exams: CourseExams
@@ -78,6 +78,8 @@ export interface RegistrationContext {
 }
 
 export type RegistrationFilter = (context: RegistrationContext) => RegistrationContext
+
+const MAX_REGISTRATION_CREDITS = 22
 
 const withIssue = (context: RegistrationContext, issue: RuleIssue): RegistrationContext => ({
   ...context,
@@ -122,11 +124,16 @@ export const creditLimitFilter: RegistrationFilter = (context) => {
     .filter((registration) => registration.status === "active")
     .reduce((total, registration) => total + registration.credits, 0)
   const totalCredits = activeCredits + context.credits
-  return totalCredits > 21
+  return totalCredits > MAX_REGISTRATION_CREDITS
     ? withIssue(context, {
         code: "CREDIT_LIMIT_EXCEEDED",
-        message: "หน่วยกิตรวมเกิน 21 หน่วยกิต",
-        details: { activeCredits, requestedCredits: context.credits, totalCredits, limit: 21 },
+        message: `หน่วยกิตรวมเกิน ${MAX_REGISTRATION_CREDITS} หน่วยกิต`,
+        details: {
+          activeCredits,
+          requestedCredits: context.credits,
+          totalCredits,
+          limit: MAX_REGISTRATION_CREDITS,
+        },
       })
     : context
 }

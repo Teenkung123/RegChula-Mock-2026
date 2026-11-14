@@ -4,7 +4,7 @@ import { resolve } from "node:path"
 const releaseId = process.argv[2]
 if (!releaseId || !/^\d+-\d+$/.test(releaseId))
   throw new Error("Expected the local startup release ID")
-const release: { api: string; web: string } = JSON.parse(
+const release: { api: string; web: string; staff: string } = JSON.parse(
   await readFile(
     resolve(import.meta.dir, "../tmp/k8s-releases", releaseId, "release.json"),
     "utf8",
@@ -13,6 +13,7 @@ const release: { api: string; web: string } = JSON.parse(
 for (const [container, image, minimum] of [
   ["api", release.api, 3],
   ["web", release.web, 2],
+  ["staff", release.staff, 1],
 ] as const) {
   const command = Bun.spawn(
     [

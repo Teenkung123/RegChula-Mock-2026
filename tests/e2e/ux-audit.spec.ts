@@ -1,5 +1,6 @@
+import { randomStudentId, test } from "./identity"
 import AxeBuilder from "@axe-core/playwright"
-import { expect, test } from "@playwright/test"
+import { expect } from "@playwright/test"
 import { stat } from "node:fs/promises"
 
 test("audit populated planning views, palette, and PNG in light and dark modes", async ({
@@ -11,8 +12,8 @@ test("audit populated planning views, palette, and PNG in light and dark modes",
   const response = await page.request.post("/api/v1/auth/login", {
     headers: { origin: "http://localhost:5173" },
     data: {
-      studentId: "audit-populated-" + Date.now(),
-      password: "local-audit-only",
+      studentId: await randomStudentId(),
+      password: "12345678",
       challengeToken: challenge.token,
       challengeCode: challenge.code,
     },
@@ -73,11 +74,21 @@ test("audit populated planning views, palette, and PNG in light and dark modes",
     }),
   )
   const checkA11y = async (label: string) => {
+    await page.evaluate(() => document.fonts.ready)
+    await expect.poll(() => page.getByRole("dialog").evaluateAll((dialogs) => dialogs.every((dialog) => {
+      for (let element: Element | null = dialog; element && element !== document.body; element = element.parentElement) {
+        if (element.hasAttribute("data-entering") || element.hasAttribute("data-exiting") ||
+          Number(getComputedStyle(element).opacity) < 0.999) return false
+      }
+      return true
+    }))).toBe(true)
     const audit = await new AxeBuilder({ page }).exclude('[data-live-announcer="true"]').analyze()
     expect(
       audit.violations
         .filter((issue) => ["serious", "critical"].includes(issue.impact ?? ""))
-        .map((issue) => ({ id: issue.id, nodes: issue.nodes.map((node) => node.target) })),
+        .map((issue) => ({ id: issue.id, nodes: issue.nodes.map((node) => ({
+          target: node.target, html: node.html, summary: node.failureSummary,
+        })) })),
       label,
     ).toEqual([])
     expect(

@@ -1,4 +1,4 @@
-import { app, runtimeAdmission } from "./app"
+import { app, catalogUploadLimit, runtimeAdmission } from "./app"
 import { config } from "./config"
 import { closeDatabase, waitForDatabase } from "./db/client"
 import { closeSharedState, waitForSharedState } from "./shared/redis"
@@ -51,7 +51,7 @@ async function start() {
   app.listen({
     hostname: config.apiHost,
     port: config.port,
-    maxRequestBodySize: config.apiMaxRequestBodyBytes,
+    maxRequestBodySize: Math.max(config.apiMaxRequestBodyBytes, catalogUploadLimit),
   })
   console.log(`[api] RegChula listening on http://${config.apiHost}:${config.port}`)
 }

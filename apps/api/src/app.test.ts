@@ -36,6 +36,36 @@ describe("Elysia 2 compatibility", () => {
     expect(body.code).toBe("REQUEST_TOO_LARGE")
   })
 
+  it("bounds ordinary request bodies without a Content-Length header", async () => {
+    const response = await app.handle(
+      new Request("http://localhost/api/v1/compat/echo", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "x".repeat(config.apiMaxRequestBodyBytes) }),
+      }),
+    )
+    expect(response.status).toBe(413)
+    expect((await response.json() as { code: string }).code).toBe("REQUEST_TOO_LARGE")
+    expect(runtimeAdmission.activeCount).toBe(0)
+  })
+
+  it("allows a combined course editor payload above the ordinary body limit while bounding its size", async () => {
+    const body = JSON.stringify({
+      nameTh: "Calculus", nameEn: "Calculus", faculty: "Science", department: "Mathematics", credits: 3,
+      sections: Array.from({ length: 5 }, (_, index) => ({ id: index + 1, sectionNo: String(index + 1), capacity: 30, note: "x".repeat(16_000) })),
+    })
+    expect(body.length).toBeGreaterThan(config.apiMaxRequestBodyBytes)
+    const response = await app.handle(new Request("http://localhost/api/v1/staff/catalog/offerings/1/editor", {
+      method: "PUT", headers: { "content-type": "application/json" }, body,
+    }))
+    expect(response.status).toBe(401)
+
+    const oversized = await app.handle(new Request("http://localhost/api/v1/staff/catalog/offerings/1/editor", {
+      method: "PUT", headers: { "content-type": "application/json" }, body: "x".repeat(2 * 1024 * 1024 + 1),
+    }))
+    expect(oversized.status).toBe(413)
+  })
+
   it("validates the new route hook order", async () => {
     const response = await app.handle(
       new Request("http://localhost/api/v1/compat/echo", {

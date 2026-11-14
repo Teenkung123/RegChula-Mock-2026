@@ -82,7 +82,11 @@ export function loadConfig(environment: Environment = process.env) {
     )
   }
   const webOrigin = environment.WEB_ORIGIN ?? "http://localhost:5173"
-  const webOrigins = [webOrigin, ...(environment.WEB_ADDITIONAL_ORIGINS ?? "").split(",")]
+  const webOrigins = [
+    webOrigin,
+    ...(appEnv === "development" || appEnv === "test" ? ["http://localhost:5174"] : []),
+    ...(environment.WEB_ADDITIONAL_ORIGINS ?? "").split(","),
+  ]
     .map((value) => value.trim())
     .filter(Boolean)
   for (const origin of webOrigins) {

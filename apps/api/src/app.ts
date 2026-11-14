@@ -9,11 +9,38 @@ import { preferencesModule } from "./modules/preferences"
 import { registrationModule } from "./modules/registration"
 import { scheduleColorsModule } from "./modules/schedule-colors"
 import { personalPlanningModule } from "./modules/personal-planning"
+import { staffAuthModule } from "./modules/staff/auth"
+import { staffAccountsModule } from "./modules/staff/accounts"
+import { staffCatalogModule } from "./modules/staff/catalog"
+import { staffEnrollmentModule } from "./modules/staff/enrollment"
+import { staffCodesModule } from "./modules/staff/codes"
+import { staffStudentEditorModule } from "./modules/staff/student-editor"
+import { staffCatalogEditorModule } from "./modules/staff/catalog-editor"
 import { appProblem } from "./shared/problem"
 import { pingSharedState, SharedStateUnavailableError } from "./shared/redis"
 
 const success = <T>(data: T) => ({ data })
 const livePath = "/api/v1/health/live"
+export const catalogUploadLimit = 64 * 1024 * 1024
+
+async function bodyExceedsLimit(request: Request, limit: number): Promise<boolean> {
+  const length = request.headers.get("content-length")
+  if (length !== null && /^\d+$/.test(length)) return Number(length) > limit
+  if (!request.body) return false
+  const reader = request.clone().body?.getReader()
+  if (!reader) return false
+  let size = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) return false
+      size += value.byteLength
+      if (size > limit) return true
+    }
+  } finally {
+    void reader.cancel()
+  }
+}
 const databaseFailureDescriptions = {
   overloaded: {
     code: "DATABASE_OVERLOADED",
@@ -77,33 +104,39 @@ export const app = new Elysia({
     sign: ["regchula_session_v2", "regchula_session", "regchula_remember"],
   },
 })
-  .request(({ request, set }) => {
+  .request(async ({ request, set }) => {
     const path = new URL(request.url).pathname
     if (path === livePath) return
 
-    const contentLength = request.headers.get("content-length")
-    if (contentLength !== null && Number(contentLength) > config.apiMaxRequestBodyBytes) {
+    const decision = runtimeAdmission.admit(request)
+    if (decision !== "accepted") {
+      retryLater(set)
+      return appProblem(
+        request,
+        503,
+        decision === "draining" ? "SERVICE_DRAINING" : "SERVER_OVERLOADED",
+        "ระบบกำลังมีผู้ใช้งานจำนวนมาก",
+        decision === "draining"
+          ? "ระบบกำลังปิดปรับปรุง กรุณาลองใหม่อีกครั้ง"
+          : "คำขอพร้อมกันเกินขีดจำกัด กรุณารอสักครู่แล้วลองใหม่",
+      )
+    }
+    const upload = path === "/api/v1/staff/catalog/import/preview" || path === "/api/v1/staff/catalog/import/confirm"
+    const catalogEditor =
+      (request.method === "POST" && path === "/api/v1/staff/catalog/offerings/editor") ||
+      (request.method === "PUT" && /^\/api\/v1\/staff\/catalog\/offerings\/\d+\/editor$/.test(path))
+    const limit = upload ? catalogUploadLimit : catalogEditor ? 2 * 1024 * 1024 : config.apiMaxRequestBodyBytes
+    const length = request.headers.get("content-length")
+    if (upload ? length !== null && Number(length) > limit : await bodyExceedsLimit(request, limit)) {
       return appProblem(
         request,
         413,
         "REQUEST_TOO_LARGE",
         "คำขอมีขนาดใหญ่เกินไป",
-        `ขนาดคำขอต้องไม่เกิน ${config.apiMaxRequestBodyBytes} ไบต์`,
+        `ขนาดคำขอต้องไม่เกิน ${limit} ไบต์`,
       )
     }
 
-    const decision = runtimeAdmission.admit(request)
-    if (decision === "accepted") return
-    retryLater(set)
-    return appProblem(
-      request,
-      503,
-      decision === "draining" ? "SERVICE_DRAINING" : "SERVER_OVERLOADED",
-      "ระบบกำลังมีผู้ใช้งานจำนวนมาก",
-      decision === "draining"
-        ? "ระบบกำลังปิดปรับปรุง กรุณาลองใหม่อีกครั้ง"
-        : "คำขอพร้อมกันเกินขีดจำกัด กรุณารอสักครู่แล้วลองใหม่",
-    )
   })
   .afterResponse(({ request }) => {
     runtimeAdmission.release(request)
@@ -113,9 +146,9 @@ export const app = new Elysia({
       path: "/openapi",
       documentation: {
         info: {
-          title: "RegChula Mock API",
+          title: "RegChula API",
           version: "1.0.0",
-          description: "Clean-room course registration demonstration API",
+          description: "Course registration API",
         },
       },
     }),
@@ -127,6 +160,13 @@ export const app = new Elysia({
   .use(registrationModule)
   .use(scheduleColorsModule)
   .use(personalPlanningModule)
+  .use(staffAuthModule)
+  .use(staffAccountsModule)
+  .use(staffCatalogModule)
+  .use(staffEnrollmentModule)
+  .use(staffCodesModule)
+  .use(staffStudentEditorModule)
+  .use(staffCatalogEditorModule)
   .get(
     "/api/v1/health/live",
     {

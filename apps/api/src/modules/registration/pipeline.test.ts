@@ -50,8 +50,16 @@ const activeRegistration = (
 })
 
 describe("registration pipeline", () => {
-  it("accepts a valid registration at the 21-credit boundary", () => {
-    const existing = Array.from({ length: 18 }, (_, index) =>
+  it("allows re-registration after an administrative removal", () => {
+    const result = runRegistrationPipeline(context({
+      courseCode: "7654321",
+      existing: [activeRegistration({ status: "removed" })],
+    }))
+    expect(result.issues.some((issue) => issue.code === "DUPLICATE_COURSE")).toBe(false)
+  })
+
+  it("accepts 22 credits and rejects 23 credits", () => {
+    const existing = Array.from({ length: 19 }, (_, index) =>
       activeRegistration({
         registrationId: index + 1,
         courseCode: String(7_000_000 + index),
@@ -60,6 +68,14 @@ describe("registration pipeline", () => {
       }),
     )
     expect(runRegistrationPipeline(context({ existing })).issues).toEqual([])
+    const rejected = runRegistrationPipeline(context({ existing, credits: 4 }))
+    expect(rejected.issues).toEqual([
+      {
+        code: "CREDIT_LIMIT_EXCEEDED",
+        message: "หน่วยกิตรวมเกิน 22 หน่วยกิต",
+        details: { activeCredits: 19, requestedCredits: 4, totalCredits: 23, limit: 22 },
+      },
+    ])
   })
 
   it("reports every applicable business issue in one preview", () => {
@@ -209,7 +225,7 @@ describe("registration pipeline", () => {
     const result = runRegistrationBatch({
       studentId: "test",
       currentTermId: 1,
-      existing: [activeRegistration({ credits: 15, meetings: [] })],
+      existing: [activeRegistration({ credits: 16, meetings: [] })],
       completedCourseCodes: new Set(),
       allowAdvisoryOverride: true,
       choices: [

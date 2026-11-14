@@ -16,6 +16,7 @@ import {
   Landmark,
   Languages,
   LayoutDashboard,
+  LockKeyhole,
   LogOut,
   Menu,
   Monitor,
@@ -138,7 +139,7 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function Brand() {
-  const { t } = useI18n()
+  const { t, text } = useI18n()
   return (
     <div className={styles.brand}>
       <span className={styles.brandMark}>
@@ -146,7 +147,7 @@ function Brand() {
       </span>
       <span>
         <strong>{t("app.name")}</strong>
-        <small>{t("app.demo")}</small>
+        <small>{text({ th: "ระบบทะเบียน", en: "Registration", zh: "选课系统" })}</small>
       </span>
     </div>
   )
@@ -159,7 +160,7 @@ export function AppShell({ studentId }: { studentId: string }) {
   const { pathname } = useLocation()
   const queryClient = useQueryClient()
   const { settings, update } = useAppearance()
-  const { t } = useI18n()
+  const { t, text } = useI18n()
   const {
     isOpen: mobileSidebarOpen,
     setOpen: setMobileSidebarOpen,
@@ -380,6 +381,8 @@ export function AppShell({ studentId }: { studentId: string }) {
                 onAction={(key) => {
                   if (String(key) === "appearance") {
                     navigate("/appearance")
+                  } else if (String(key) === "password") {
+                    navigate("/account/password")
                   } else if (String(key) === "logout") {
                     logoutMutation.mutate()
                   }
@@ -488,6 +491,16 @@ export function AppShell({ studentId }: { studentId: string }) {
                   <SlidersHorizontal aria-hidden="true" size={16} />
                   <span className={styles.menuLabel}>{t("shell.appearance")}</span>
                 </Dropdown.Item>
+                <Dropdown.Item
+                  className={css(styles.menuItem)}
+                  id="password"
+                  textValue={text({ th: "เปลี่ยนรหัสผ่าน", en: "Change password", zh: "更改密码" })}
+                >
+                  <LockKeyhole aria-hidden="true" size={16} />
+                  <span className={styles.menuLabel}>
+                    {text({ th: "เปลี่ยนรหัสผ่าน", en: "Change password", zh: "更改密码" })}
+                  </span>
+                </Dropdown.Item>
                 <Separator className={css(styles.menuSeparator)} />
                 <Dropdown.Item
                   className={css(styles.menuItem)}
@@ -508,7 +521,7 @@ export function AppShell({ studentId }: { studentId: string }) {
           <Outlet />
         </Suspense>
         <footer className={styles.footer}>
-          <span>{t("app.name")} Mock</span>
+          <span>{t("app.name")}</span>
           <span>{t("shell.importedData")}</span>
         </footer>
       </main>

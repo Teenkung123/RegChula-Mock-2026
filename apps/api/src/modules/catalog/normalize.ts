@@ -316,7 +316,9 @@ function normalizeReview(
     courseCode: asText(raw.courseNo) || fallbackCourseCode,
     academicYear: asInteger(raw.academicYear, fallbackYear) || fallbackYear,
     semester: asInteger(raw.semester, fallbackSemester) || fallbackSemester,
-    studyProgram: nullableText(raw.studyProgram) ?? nullableText(fallbackProgram),
+    studyProgram: Object.hasOwn(raw, "studyProgram") && raw.studyProgram === null
+      ? null
+      : nullableText(raw.studyProgram) ?? nullableText(fallbackProgram),
     rating,
     content: asText(raw.content),
     likeCount: asInteger(raw.likeCount),

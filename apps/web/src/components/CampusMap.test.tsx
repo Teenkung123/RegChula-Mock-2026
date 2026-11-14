@@ -77,6 +77,24 @@ function model() {
   return { scene, ground, pathMaterial }
 }
 
+function pointer(
+  canvas: HTMLCanvasElement,
+  type: string,
+  id: number,
+  x: number,
+  y: number,
+  button = 0,
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperties(event, {
+    pointerId: { value: id },
+    clientX: { value: x },
+    clientY: { value: y },
+    button: { value: button },
+  })
+  fireEvent(canvas, event)
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.requests.length = 0
@@ -109,7 +127,81 @@ afterEach(() => {
 })
 
 describe("campus map lifecycle and controls", () => {
-  it("supports drag, pinch, wheel and resize without tilting or exposing ground edges", async () => {
+  it("orbits with the right button, clamps tilt and restores north or the complete fitted view", async () => {
+    render(
+      <CampusMap
+        route={[
+          { x: 0, y: 0 },
+          { x: 100, y: 200 },
+        ]}
+        endpoints={[]}
+      />,
+    )
+    const compass = await screen.findByRole("button", { name: "Point north" })
+    const heading = compass.querySelector("[data-map-heading]")
+    const canvas = document.querySelector("canvas")
+    if (!canvas || !heading) throw new Error("Map controls were not mounted")
+    expect(screen.getByRole("button", { name: "Tilt less" })).toBeDisabled()
+    pointer(canvas, "pointerdown", 1, 100, 100, 2)
+    pointer(canvas, "pointermove", 1, 400, 400, 2)
+    await waitFor(() => {
+      expect(heading).toHaveAttribute("data-map-heading", "90")
+      expect(heading).toHaveAttribute("data-map-tilt", "45")
+    })
+    expect(screen.getByRole("button", { name: "Tilt more" })).toBeDisabled()
+    const renderCount = mocks.render.mock.calls.length
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+    expect(mocks.render.mock.calls.length).toBe(renderCount)
+    pointer(canvas, "pointercancel", 1, 400, 400, 2)
+    pointer(canvas, "pointermove", 1, 600, 200, 2)
+    fireEvent.click(compass)
+    await waitFor(() => expect(heading).toHaveAttribute("data-map-heading", "0"))
+    expect(heading).toHaveAttribute("data-map-tilt", "45")
+    fireEvent.click(screen.getByRole("button", { name: "Tilt less" }))
+    await waitFor(() => expect(heading).toHaveAttribute("data-map-tilt", "30"))
+    const viewport = screen.getByRole("application")
+    fireEvent.keyDown(viewport, { key: "ArrowRight", shiftKey: true })
+    fireEvent.keyDown(viewport, { key: "ArrowDown", shiftKey: true })
+    await waitFor(() => {
+      expect(heading).toHaveAttribute("data-map-heading", "15")
+      expect(heading).toHaveAttribute("data-map-tilt", "15")
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Fit route / reset view" }))
+    await waitFor(() => {
+      expect(heading).toHaveAttribute("data-map-heading", "0")
+      expect(heading).toHaveAttribute("data-map-tilt", "0")
+    })
+  })
+
+  it("twists with two fingers and drops cancelled pointer captures without a stuck gesture", async () => {
+    render(<CampusMap route={[{ x: 0, y: 0 }]} endpoints={[]} />)
+    const compass = await screen.findByRole("button", { name: "Point north" })
+    const heading = compass.querySelector("[data-map-heading]")
+    const canvas = document.querySelector("canvas")
+    if (!canvas || !heading) throw new Error("Map controls were not mounted")
+    pointer(canvas, "pointerdown", 1, 300, 200)
+    pointer(canvas, "pointerdown", 2, 500, 200)
+    pointer(canvas, "pointermove", 1, 400, 100)
+    pointer(canvas, "pointermove", 2, 400, 300)
+    await waitFor(() => expect(heading).toHaveAttribute("data-map-heading", "270"))
+    expect(heading).toHaveAttribute("data-map-tilt", "0")
+    pointer(canvas, "lostpointercapture", 1, 400, 100)
+    pointer(canvas, "pointercancel", 2, 400, 300)
+    pointer(canvas, "pointermove", 1, 500, 200)
+    pointer(canvas, "pointermove", 2, 300, 200)
+    fireEvent.wheel(canvas, { deltaY: -50, clientX: 400, clientY: 250 })
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+    expect(heading).toHaveAttribute("data-map-heading", "270")
+    pointer(canvas, "pointerdown", 3, 300, 200, 2)
+    pointer(canvas, "pointermove", 3, 600, 200, 2)
+    await waitFor(() => expect(heading).toHaveAttribute("data-map-heading", "0"))
+  })
+
+  it("supports drag, pinch, wheel and resize without exposing ground edges", async () => {
     render(<CampusMap route={[{ x: 0, y: 0 }]} endpoints={[]} />)
     await screen.findByRole("button", { name: "Zoom in" })
     expect(screen.queryByRole("button", { name: "Move map" })).toBeNull()
@@ -117,33 +209,24 @@ describe("campus map lifecycle and controls", () => {
     expect(screen.getByRole("application")).not.toHaveFocus()
     const canvas = document.querySelector("canvas")
     if (!canvas) throw new Error("Canvas was not mounted")
-    const pointer = (type: string, id: number, x: number, y: number) => {
-      const event = new Event(type, { bubbles: true, cancelable: true })
-      Object.defineProperties(event, {
-        pointerId: { value: id },
-        clientX: { value: x },
-        clientY: { value: y },
-        button: { value: 0 },
-      })
-      fireEvent(canvas, event)
-    }
-    pointer("pointerdown", 1, 300, 200)
-    pointer("pointermove", 1, 8000, -5000)
-    pointer("pointerdown", 2, 400, 250)
-    pointer("pointermove", 2, 405, 255)
-    pointer("pointerup", 1, 8000, -5000)
-    pointer("pointercancel", 2, 405, 255)
+    pointer(canvas, "pointerdown", 1, 300, 200)
+    pointer(canvas, "pointermove", 1, 8000, -5000)
+    pointer(canvas, "pointerdown", 2, 400, 250)
+    pointer(canvas, "pointermove", 2, 405, 255)
+    pointer(canvas, "pointerup", 1, 8000, -5000)
+    pointer(canvas, "pointercancel", 2, 405, 255)
     fireEvent.wheel(canvas, { deltaY: 20000, clientX: 400, clientY: 250 })
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(350)
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(500)
     act(() => {
       mocks.resize?.()
     })
-    await waitFor(() => expect(mocks.render).toHaveBeenCalled())
+    await waitFor(() => {
+      const camera = mocks.render.mock.lastCall?.[1] as PerspectiveCamera | undefined
+      expect(camera?.aspect).toBeCloseTo(350 / 500)
+    })
     const camera = mocks.render.mock.lastCall?.[1] as PerspectiveCamera
-    expect(camera.rotation.x).toBeCloseTo(-Math.PI / 2, 14)
-    expect(camera.rotation.y).toBeCloseTo(0, 14)
-    expect(camera.rotation.z).toBeCloseTo(0, 14)
+    expect(camera.getWorldDirection(new Vector3()).y).toBeCloseTo(-1, 14)
     for (const x of [-1, 1]) {
       for (const y of [-1, 1]) {
         const ray = new Vector3(x, y, 0.5).unproject(camera).sub(camera.position).normalize()

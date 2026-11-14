@@ -56,7 +56,7 @@ interface ExistingRow extends MeetingRow {
   short_name: string | null
   registration_id: number
   course_code: string
-  status: "active" | "dropped" | "withdrawn"
+  status: "active" | "dropped" | "withdrawn" | "removed"
   credits: number
   offering_id: number
   section_no: string
@@ -81,7 +81,7 @@ export interface RegistrationSummary {
   nameTh: string
   nameEn: string
   credits: number
-  status: "active" | "dropped" | "withdrawn"
+  status: "active" | "dropped" | "withdrawn" | "removed"
   offeringId: number
   sectionId: number
   sectionNo: string
@@ -96,7 +96,7 @@ export interface RegistrationSummary {
   >
 }
 
-export async function getCurrentTerm(connection: PoolConnection): Promise<CurrentTermRow | null> {
+export async function getCurrentTerm(connection: PoolConnection, lock = false): Promise<CurrentTermRow | null> {
   const [rows] = await connection.query<CurrentTermRow[]>(
     [
       "SELECT t.id, t.academic_year, t.semester, t.label",
@@ -104,6 +104,7 @@ export async function getCurrentTerm(connection: PoolConnection): Promise<Curren
       "INNER JOIN academic_terms t ON t.id = CAST(a.value AS UNSIGNED)",
       "WHERE a.`key` = 'current_term_id'",
       "LIMIT 1",
+      ...(lock ? ["FOR SHARE"] : []),
     ].join(" "),
   )
   return rows[0] ?? null
@@ -413,5 +414,5 @@ export async function listCurrentRegistrations(connection: PoolConnection, stude
   const term = await getCurrentTerm(connection)
   if (!term) return { term: null, registrations: [] }
   const existing = await existingRegistrations(connection, studentId, term.id)
-  return { term, registrations: existing.summaries }
+  return { term, registrations: existing.summaries.filter((registration) => registration.status !== "removed") }
 }

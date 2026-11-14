@@ -3,6 +3,7 @@ import { config } from "../../config"
 import { pool } from "../../db/client"
 import { runTransaction } from "../../db/transaction"
 import { hashRequest, signToken, verifyToken } from "../../shared/tokens"
+import { registrationAccess } from "./access"
 import { blockingRegistrationIssues, type RuleIssue } from "./pipeline"
 import {
   evaluateRegistration,
@@ -34,7 +35,7 @@ interface BatchRegistrationConfirmation {
 
 interface RegistrationRecordRow extends RowDataPacket {
   id: number
-  status: "active" | "dropped" | "withdrawn"
+  status: "active" | "dropped" | "withdrawn" | "removed"
   section_id: number
 }
 
@@ -67,6 +68,19 @@ export function failed(
   return result
 }
 
+async function requireRegistrationAccess(connection: PoolConnection, studentId: string, termId?: number, lock = false) {
+  const access = await registrationAccess(connection, studentId, termId, lock)
+  if (access.authorized) return null
+  const details = {
+    closed: ["REGISTRATION_CLOSED", "ยังไม่อยู่ในช่วงลงทะเบียน"],
+    profile_required: ["REGISTRATION_PROFILE_REQUIRED", "ติดต่อสำนักงานทะเบียนเพื่อตรวจสอบข้อมูลนิสิตและอาจารย์ที่ปรึกษา"],
+    code_required: ["REGISTRATION_CODE_REQUIRED", "กรอกรหัสลงทะเบียนจากอาจารย์ที่ปรึกษา"],
+    open: ["REGISTRATION_ACCESS_REQUIRED", "ตรวจสอบสิทธิ์ลงทะเบียน"],
+  } as const
+  const [code, detail] = details[access.status]
+  return failed(409, code, "ไม่สามารถลงทะเบียนได้", detail)
+}
+
 function blockingIssues(issues: RuleIssue[], allowAdvisoryOverride: boolean): RuleIssue[] {
   return blockingRegistrationIssues(issues, allowAdvisoryOverride)
 }
@@ -89,6 +103,8 @@ export async function registrationPreview(
 ): Promise<ServiceResult<Record<string, unknown>>> {
   const connection = await pool.getConnection()
   try {
+    const access = await requireRegistrationAccess(connection, studentId)
+    if (access) return access
     const evaluation = await evaluateRegistration(connection, studentId, sectionId, false)
     if (!evaluation) {
       return failed(404, "SECTION_NOT_FOUND", "ไม่พบตอนเรียน", "เลือกตอนเรียนที่เปิดอยู่แล้วลองอีกครั้ง")
@@ -270,6 +286,8 @@ export async function commitRegistration(
         requestHash,
       )
       if (concurrentReplay) return { commit: false, value: concurrentReplay }
+      const access = await requireRegistrationAccess(tx, studentId, payload.termId, true)
+      if (access) return { commit: false, value: access }
       const evaluation = await evaluateRegistration(tx, studentId, payload.sectionId, true)
       if (!evaluation) {
         return {
@@ -291,7 +309,7 @@ export async function commitRegistration(
         [studentId, payload.termId, evaluation.target.course_code],
       )
       const prior = existingRows[0]
-      if (prior && prior.status !== "dropped") {
+      if (prior && prior.status !== "dropped" && prior.status !== "removed") {
         return {
           commit: false,
           value: failed(
@@ -410,6 +428,8 @@ export async function registrationBatchPreview(
 ): Promise<ServiceResult<Record<string, unknown>>> {
   const connection = await pool.getConnection()
   try {
+    const access = await requireRegistrationAccess(connection, studentId)
+    if (access) return access
     const evaluation = await evaluateRegistrationBatch(
       connection,
       studentId,
@@ -551,6 +571,9 @@ export async function commitRegistrationBatch(
       const replay = await replayOrConflict(tx, studentId, scope, idempotencyKey, requestHash)
       if (replay) return { commit: false, value: replay }
 
+      const access = await requireRegistrationAccess(tx, studentId, payload.termId, true)
+      if (access) return { commit: false, value: access }
+
       const evaluation = await evaluateRegistrationBatch(
         tx,
         studentId,
@@ -636,7 +659,7 @@ export async function commitRegistrationBatch(
         const prior = priorByCourse.get(target.course_code)
         let registrationId: number
         let eventAction: "registered" | "reactivated"
-        if (prior?.status === "dropped") {
+        if (prior?.status === "dropped" || prior?.status === "removed") {
           await tx.query(
             [
               "UPDATE registrations",

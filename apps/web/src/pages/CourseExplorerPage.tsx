@@ -823,9 +823,9 @@ export function CourseExplorerPage() {
           </h1>
           <p>
             {text({
-              th: "กรองข้อมูลรายวิชาจากภาคที่เลือกโดยไม่เปลี่ยนแปลงแผนการลงทะเบียน",
-              en: "Narrow catalogue data for a selected term without changing your registration plan.",
-              zh: "按选定学期筛选课程目录，不会改变您的选课计划。",
+              th: "ค้นหาและวางแผนรายวิชาในภาคที่เลือก",
+              en: "Find and plan courses for the selected term.",
+              zh: "查找并规划所选学期的课程。",
             })}
           </p>
         </div>
@@ -1236,9 +1236,9 @@ export function CourseExplorerPage() {
                 <h2>{text({ th: "ผลการค้นหา", en: "Search results", zh: "搜索结果" })}</h2>
                 <p>
                   {text({
-                    th: "สำรวจรายละเอียดรายวิชาได้โดยไม่เปลี่ยนแปลงแผนการลงทะเบียน",
-                    en: "Explore course details without changing your registration plan.",
-                    zh: "浏览课程详情，不会改变您的选课计划。",
+                    th: "ดูรายละเอียดและวางแผนรายวิชาที่ต้องการลงทะเบียน",
+                    en: "Explore course details and plan your registration.",
+                    zh: "浏览课程详情并规划选课。",
                   })}
                 </p>
               </div>

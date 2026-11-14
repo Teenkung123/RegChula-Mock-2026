@@ -1,17 +1,17 @@
 import { Elysia, t } from "elysia"
 import { config } from "../../config"
-import { appProblem } from "../../shared/problem"
 import { canonicalStudentId, originIsAllowed } from "../../shared/http"
-import { createChallenge, findStudent, loginWithChallenge } from "./service"
+import { appProblem } from "../../shared/problem"
+import { consumeGlobalRate } from "../../shared/redis"
 import {
   revokeCurrentStudentSession,
+  type SessionCookieJar,
   sessionCookieSchema,
   setStudentSession,
   touchStudentSession,
-  type SessionCookieJar,
 } from "../../shared/session"
 import { TokenBucket } from "./rate-limit"
-import { consumeGlobalRate } from "../../shared/redis"
+import { changeStudentPassword, createChallenge, findStudent, loginWithChallenge } from "./service"
 
 const challengeRate = new TokenBucket(config.authChallengeRatePerSecond, config.authChallengeBurst)
 const loginRate = new TokenBucket(config.authLoginRatePerSecond, config.authLoginBurst)
@@ -81,13 +81,13 @@ export const authModule = new Elysia({ name: "auth" })
         )
       }
       const studentId = canonicalStudentId(body.studentId)
-      if (!studentId) {
+      if (!/^\d{10}$/.test(studentId)) {
         return appProblem(
           request,
           400,
-          "STUDENT_ID_REQUIRED",
-          "กรอกรหัสนิสิต",
-          "รหัสนิสิตต้องมีอย่างน้อย 1 ตัวอักษร",
+          "STUDENT_ID_INVALID",
+          "รหัสนิสิตไม่ถูกต้อง",
+          "กรอกรหัสนิสิตเป็นตัวเลข 10 หลัก",
         )
       }
       const rateDecision = loginRate.consume()
@@ -98,6 +98,7 @@ export const authModule = new Elysia({ name: "auth" })
       const rememberMe = body.rememberMe === true
       const login = await loginWithChallenge(
         studentId,
+        body.password,
         rememberMe,
         body.challengeToken,
         body.challengeCode,
@@ -111,6 +112,15 @@ export const authModule = new Elysia({ name: "auth" })
           "ใช้โปรไฟล์เดิมหรือล้างเฉพาะข้อมูลทดสอบที่ได้รับอนุญาตก่อนลองใหม่",
         )
       }
+      if (!login.ok && login.reason === "credentials") {
+        return appProblem(
+          request,
+          401,
+          "INVALID_CREDENTIALS",
+          "เข้าสู่ระบบไม่ได้",
+          "รหัสนิสิตหรือรหัสผ่านไม่ถูกต้อง",
+        )
+      }
       if (!login.ok) {
         return appProblem(
           request,
@@ -122,6 +132,48 @@ export const authModule = new Elysia({ name: "auth" })
       }
       setStudentSession(cookie as SessionCookieJar, login.sessionToken, rememberMe)
       return { data: { studentId } }
+    },
+  )
+  .post(
+    "/api/v1/auth/password",
+    {
+      cookie: sessionCookieSchema,
+      body: t.Object({
+        currentPassword: t.String({ minLength: 1, maxLength: 128 }),
+        newPassword: t.String({ minLength: 8, maxLength: 128 }),
+      }),
+      detail: { tags: ["Auth"], summary: "Change student password" },
+    },
+    async ({ body, cookie, request, set }) => {
+      if (!originIsAllowed(request)) {
+        return appProblem(
+          request,
+          400,
+          "ORIGIN_NOT_ALLOWED",
+          "เปลี่ยนรหัสผ่านไม่ได้",
+          "คำขอมาจากเว็บไซต์ที่ไม่ได้รับอนุญาต",
+        )
+      }
+      const session = await touchStudentSession(cookie as SessionCookieJar)
+      if (!session)
+        return appProblem(request, 401, "AUTH_REQUIRED", "ต้องเข้าสู่ระบบ", "เข้าสู่ระบบก่อนเปลี่ยนรหัสผ่าน")
+      const rateDecision = loginRate.consume()
+      if (!rateDecision.allowed) return rateLimited(request, set, rateDecision.retryAfterSeconds)
+      if (!(await consumeGlobalRate("auth-login", config.authGlobalLoginRatePerSecond))) {
+        return rateLimited(request, set, 1)
+      }
+      if (
+        !(await changeStudentPassword(session.studentId, body.currentPassword, body.newPassword))
+      ) {
+        return appProblem(
+          request,
+          400,
+          "INVALID_CREDENTIALS",
+          "เปลี่ยนรหัสผ่านไม่ได้",
+          "รหัสผ่านปัจจุบันไม่ถูกต้อง",
+        )
+      }
+      return { data: { changed: true as const } }
     },
   )
   .post(

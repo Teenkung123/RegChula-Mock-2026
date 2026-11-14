@@ -1,7 +1,7 @@
 import { PerspectiveCamera } from "three"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { createCampusBuildingLabelLayer } from "./campus-building-label-layer"
-import { applyNorthUpCamera } from "./campus-map-camera"
+import { applyMapCamera } from "./campus-map-camera"
 
 const mounted: Array<{
   layer: HTMLUListElement
@@ -26,7 +26,14 @@ describe("building name layer", () => {
   it("joins mapped names to unnamed footprints and uses explicit localized source names", () => {
     const { layer, labels } = mountLabels()
     labels.setModelAnchors([
-      { id: "way/1", x: -100, y: 0, height: 20, name: "Library", nameTh: "ห้องสมุด" },
+      {
+        id: "way/1",
+        x: -100,
+        y: 0,
+        height: 20,
+        name: "Library",
+        nameTh: "ห้องสมุด",
+      },
       { id: "way/2", x: 100, y: 0, height: 25 },
       { id: "way/3", x: 0, y: 100, height: 10 },
     ])
@@ -57,10 +64,10 @@ describe("building name layer", () => {
       vi.spyOn(element, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 80, 24)),
     )
     const camera = new PerspectiveCamera()
-    applyNorthUpCamera(camera, { x: 0, y: 0, spanY: 500 }, 1, { min: 0, max: 40 })
+    applyMapCamera(camera, { x: 0, y: 0, spanY: 500 }, 1, { min: 0, max: 40 })
     labels.render(camera, 400, 400, [])
     expect(elements.every((element) => !element.hidden)).toBe(true)
-    applyNorthUpCamera(camera, { x: 10, y: 0, spanY: 500 }, 1, { min: 0, max: 40 })
+    applyMapCamera(camera, { x: 10, y: 0, spanY: 500 }, 1, { min: 0, max: 40 })
     labels.render(camera, 400, 400, [])
     for (const measure of measurements) expect(measure).toHaveBeenCalledOnce()
     labels.invalidateMeasurements()

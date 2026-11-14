@@ -197,6 +197,75 @@ describe("campus walking graph", () => {
   })
 })
 describe("building and floor resolution", () => {
+  it("resolves MATH508/1 and MHVH to one named footprint with an existing route to TAB", () => {
+    const campus = navigationData as CampusData
+    const math = resolveBuilding(campus.buildings, "MATH508/1")
+    const tab = resolveBuilding(campus.buildings, "TAB")
+    expect(math).toMatchObject({
+      code: "MATH",
+      name: "Maha Vajirunhis Building",
+      footprintId: "way/211564709",
+      accessNodeId: "10891514634",
+      accessConfidence: "nearest_mapped_path_not_verified_entrance",
+    })
+    if (!math || !tab) throw new Error("Expected the mathematics and TAB buildings to resolve")
+    for (const label of ["MATH", "MATH 508/1", "MHVH", "MHVH1201", "Mathematics Building"])
+      expect(resolveBuilding(campus.buildings, label)).toBe(math)
+    expect(resolveBuilding(campus.buildings, "", "MATH508/1")).toBe(math)
+    expect(resolveBuilding(campus.buildings, "MATH", "508/1")).toBe(math)
+    expect(resolveBuilding(campus.buildings, "MAHAV")?.footprintId).not.toBe(math.footprintId)
+    expect(campus.buildings.filter((building) => building.footprintId === math.footprintId)).toHaveLength(
+      1,
+    )
+    const route = walkingRoute(makeCampusGraph(campus), math.accessNodeId, tab.accessNodeId)
+    expect(route?.distanceM).toBeCloseTo(202.841, 3)
+    expect(route?.points[0]?.id).toBe(math.accessNodeId)
+    expect(route?.points.at(-1)?.id).toBe(tab.accessNodeId)
+    // Official 19/20-storey totals disagree; neither total proves a room convention.
+    expect(roomFloor(math, "MATH508/1")).toBeNull()
+    expect(roomFloor(math, "MHVH1201")).toBeNull()
+  })
+  it("maps SCI10 to Klum Watcharobol without inferring a classroom floor", () => {
+    const campus = navigationData as CampusData
+    const science = resolveBuilding(campus.buildings, "SCI10")
+    expect(science).toMatchObject({
+      code: "SCI10",
+      name: "Klum Watcharobol Building",
+      footprintId: "way/158060486",
+      accessNodeId: "10072839712",
+      accessConfidence: "nearest_mapped_path_not_verified_entrance",
+    })
+    if (!science) throw new Error("Expected the evidenced SCI10 building to resolve")
+    expect(resolveBuilding(campus.buildings, "SCI10 301")).toBe(science)
+    expect(roomFloor(science, "301")).toBeNull()
+  })
+  it("keeps code aliases unambiguous and all building access on the existing graph", () => {
+    const campus = navigationData as CampusData
+    const graph = makeCampusGraph(campus)
+    const aliases = new Map<string, string>()
+    expect(new Set(campus.buildings.map((building) => building.footprintId)).size).toBe(
+      campus.buildings.length,
+    )
+    for (const building of campus.buildings) {
+      for (const alias of [building.code, ...building.aliases]) {
+        const key = alias.toUpperCase().replace(/[\s._-]/g, "")
+        expect(aliases.get(key) ?? building.code).toBe(building.code)
+        aliases.set(key, building.code)
+        expect(resolveBuilding(campus.buildings, alias)).toBe(building)
+      }
+      expect(graph.nodes.has(building.accessNodeId)).toBe(true)
+      expect(graph.adjacency.get(building.accessNodeId)?.length).toBeGreaterThan(0)
+      expect(building.accessConfidence).toBe("nearest_mapped_path_not_verified_entrance")
+    }
+    expect(campus.nodes).toHaveLength(5515)
+    expect(campus.edges).toHaveLength(6153)
+  })
+  it.each(["AR", "PSY", "CUP3A", "CE", "ENV", "CELAB", "CART1", "COM2", "COM8", "CUP5P"])(
+    "withholds %s when location, identity, current geometry or safe access still needs review",
+    (code) => {
+      expect(resolveBuilding((navigationData as CampusData).buildings, code)).toBeNull()
+    },
+  )
   it("resolves PHOTO501 to its evidenced campus footprint and an existing route from MHMK M02", () => {
     const campus = navigationData as CampusData
     const from = resolveBuilding(campus.buildings, "MHMK", "M02")

@@ -46,6 +46,42 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: staff-boundary
+  namespace: regchula
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: regchula-staff
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: regchula
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: regchula-api
+      ports:
+        - protocol: TCP
+          port: 3000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: api-boundary
   namespace: regchula
 spec:
@@ -58,6 +94,9 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: regchula-web
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: regchula-staff
       ports:
         - protocol: TCP
           port: 3000

@@ -3,14 +3,14 @@ import { eq } from "drizzle-orm"
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise"
 import { config } from "../../config"
 import { db, pool } from "../../db/client"
-import { runTransaction } from "../../db/transaction"
 import { students } from "../../db/schema"
+import { runTransaction } from "../../db/transaction"
 import {
   cacheStudentSession,
   replaceStudentSession,
   studentSessionIsActive,
 } from "../../shared/session-store"
-import { hashRequest, verifyToken, signToken } from "../../shared/tokens"
+import { hashRequest, signToken, verifyToken } from "../../shared/tokens"
 
 interface ChallengePayload {
   version: 2
@@ -28,9 +28,14 @@ interface BooleanRow extends RowDataPacket {
   value: number
 }
 
+interface CredentialRow extends RowDataPacket {
+  password_hash: string
+  active: number
+}
+
 export type ChallengeLoginResult =
   | { ok: true; sessionToken: string; previousSessionHashes: string[] }
-  | { ok: false; reason: "invalid" | "capacity" }
+  | { ok: false; reason: "invalid" | "credentials" | "capacity" }
 
 let cleanupCounter = 0
 
@@ -128,6 +133,7 @@ export function createChallenge() {
 
 export async function loginWithChallenge(
   studentId: string,
+  password: string,
   rememberMe: boolean,
   token: string,
   answer: string,
@@ -142,6 +148,21 @@ export async function loginWithChallenge(
     return { ok: false, reason: "invalid" }
   }
 
+  // Password work is deliberately outside the transaction. The row is checked again
+  // under lock before a session is issued, so a concurrent password change wins.
+  const [credentials] = await pool.query<CredentialRow[]>(
+    "SELECT password_hash, active FROM student_credentials WHERE student_id = ? LIMIT 1",
+    [studentId],
+  )
+  const existingHash = credentials[0]?.password_hash
+  if (existingHash && !credentials[0]?.active) return { ok: false, reason: "credentials" }
+  if (
+    existingHash ? !(await Bun.password.verify(password, existingHash)) : password !== "12345678"
+  ) {
+    return { ok: false, reason: "credentials" }
+  }
+  const initialHash = existingHash ? null : await Bun.password.hash(password)
+
   await cleanupExpiredChallenges()
   const requestHash = hashRequest({ nonce: payload.nonce, studentId, rememberMe })
   const sessionToken = deriveSessionToken(payload.nonce, studentId, rememberMe)
@@ -155,6 +176,23 @@ export async function loginWithChallenge(
       )
       if (!freshRows[0]?.value) {
         return { commit: false, value: { ok: false, reason: "invalid" } }
+      }
+      if (initialHash) {
+        await ensureStudentWithConnection(connection, studentId)
+        await connection.execute(
+          "INSERT IGNORE INTO student_credentials (student_id, password_hash) VALUES (?, ?)",
+          [studentId, initialHash],
+        )
+      }
+      const [lockedCredentials] = await connection.query<CredentialRow[]>(
+        "SELECT password_hash, active FROM student_credentials WHERE student_id = ? FOR UPDATE",
+        [studentId],
+      )
+      if (
+        !lockedCredentials[0]?.active ||
+        lockedCredentials[0].password_hash !== (existingHash ?? initialHash)
+      ) {
+        return { commit: false, value: { ok: false, reason: "credentials" } }
       }
       const [inserted] = await connection.execute<ResultSetHeader>(
         [
@@ -231,4 +269,24 @@ export async function findStudent(studentId: string) {
     .where(eq(students.studentId, studentId))
     .limit(1)
   return student ?? null
+}
+
+export async function changeStudentPassword(
+  studentId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<boolean> {
+  const [rows] = await pool.query<CredentialRow[]>(
+    "SELECT password_hash, active FROM student_credentials WHERE student_id = ? LIMIT 1",
+    [studentId],
+  )
+  const oldHash = rows[0]?.password_hash
+  if (!oldHash || !rows[0]?.active || !(await Bun.password.verify(currentPassword, oldHash)))
+    return false
+  const newHash = await Bun.password.hash(newPassword)
+  const [result] = await pool.execute<ResultSetHeader>(
+    "UPDATE student_credentials SET password_hash = ? WHERE student_id = ? AND password_hash = ? AND active = true",
+    [newHash, studentId, oldHash],
+  )
+  return result.affectedRows === 1
 }

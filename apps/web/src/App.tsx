@@ -46,6 +46,9 @@ const FacultiesPage = lazy(() =>
 const AppearancePage = lazy(() =>
   import("./pages/AppearancePage").then((module) => ({ default: module.AppearancePage })),
 )
+const PasswordPage = lazy(() =>
+  import("./pages/PasswordPage").then((module) => ({ default: module.PasswordPage })),
+)
 const FeedbackRegion = lazy(() =>
   import("./components/FeedbackRegion").then((module) => ({ default: module.FeedbackRegion })),
 )
@@ -114,6 +117,7 @@ export function App() {
             <Route path="/buildings" element={<BuildingsPage />} />
             <Route path="/faculties" element={<FacultiesPage />} />
             <Route path="/appearance" element={<AppearancePage />} />
+            <Route path="/account/password" element={<PasswordPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

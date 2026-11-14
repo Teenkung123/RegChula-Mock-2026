@@ -72,7 +72,18 @@ async function isRegChulaWebReady() {
     const response = await fetch("http://127.0.0.1:5173", {
       signal: AbortSignal.timeout(2_000),
     })
-    return response.ok && (await response.text()).includes("<title>RegChula Mock</title>")
+    return response.ok && (await response.text()).includes("<title>RegChula</title>")
+  } catch {
+    return false
+  }
+}
+
+async function isRegChulaStaffReady() {
+  try {
+    const response = await fetch("http://127.0.0.1:5174", {
+      signal: AbortSignal.timeout(2_000),
+    })
+    return response.ok && (await response.text()).includes("<title>RegChula · Staff</title>")
   } catch {
     return false
   }
@@ -82,9 +93,11 @@ async function monitorExistingServices() {
   console.log("[dev] Monitoring the existing services. Press Ctrl+C to stop this launcher.")
   while (true) {
     await wait(5_000)
-    const [apiReady, webReady] = await Promise.all([isRegChulaApiReady(), isRegChulaWebReady()])
-    if (!apiReady || !webReady) {
-      const stopped = [apiReady ? undefined : "API", webReady ? undefined : "web app"]
+    const [apiReady, webReady, staffReady] = await Promise.all([
+      isRegChulaApiReady(), isRegChulaWebReady(), isRegChulaStaffReady(),
+    ])
+    if (!apiReady || !webReady || !staffReady) {
+      const stopped = [apiReady ? undefined : "API", webReady ? undefined : "web app", staffReady ? undefined : "staff app"]
         .filter(Boolean)
         .join(" and ")
       throw new Error(`The reused RegChula ${stopped} stopped responding. Run start.bat again.`)
@@ -94,14 +107,17 @@ async function monitorExistingServices() {
 
 async function main() {
   await ensureServices()
-  const [apiReady, webReady] = await Promise.all([isRegChulaApiReady(), isRegChulaWebReady()])
-  const scripts = [apiReady ? undefined : "dev:api", webReady ? undefined : "dev:web"].filter(
+  const [apiReady, webReady, staffReady] = await Promise.all([
+    isRegChulaApiReady(), isRegChulaWebReady(), isRegChulaStaffReady(),
+  ])
+  const scripts = [apiReady ? undefined : "dev:api", webReady ? undefined : "dev:web", staffReady ? undefined : "dev:staff"].filter(
     (script): script is string => Boolean(script),
   )
   if (apiReady) console.log("[dev] Reusing the healthy RegChula API on port 3000.")
   if (webReady) console.log("[dev] Reusing the healthy RegChula web app on port 5173.")
+  if (staffReady) console.log("[dev] Reusing the healthy RegChula staff app on port 5174.")
   if (scripts.length === 0) {
-    console.log("[dev] RegChula is already running at http://localhost:5173")
+    console.log("[dev] RegChula is already running at http://localhost:5173 and http://localhost:5174")
     await monitorExistingServices()
     return
   }

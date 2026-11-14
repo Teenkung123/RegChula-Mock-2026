@@ -1,12 +1,13 @@
-import { expect, test } from "@playwright/test"
+import { expect } from "@playwright/test"
+import { randomStudentId, test } from "./identity"
 
 test("appearance cards accept edge clicks and repeated changes during slow saves", async ({
   page,
 }) => {
   await page.goto("/login")
   await expect(page.getByTestId("challenge-code")).toHaveText(/^\d{4}$/)
-  await page.getByLabel("รหัสนิสิต").fill(`hitbox-${crypto.randomUUID().slice(0, 8)}`)
-  await page.getByLabel("รหัสผ่าน").fill("local-e2e-only")
+  await page.getByLabel("รหัสนิสิต").fill(await randomStudentId())
+  await page.getByLabel("รหัสผ่าน").fill("12345678")
   await page
     .getByLabel("กรอกรหัสยืนยัน")
     .fill((await page.getByTestId("challenge-code").textContent())?.trim() ?? "")

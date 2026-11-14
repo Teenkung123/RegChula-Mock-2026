@@ -9,6 +9,8 @@
 
 .searchLink,
 .actions,
+.courseToolbar,
+.courseActions,
 .seatStatus,
 .dialogActions {
   display: flex;
@@ -317,8 +319,24 @@
   padding: var(--space-xs);
   justify-self: end;
 }
-.actions {
+.courseToolbar {
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.courseToolbar h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.courseActions {
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.actions {
+  justify-content: flex-end;
   gap: var(--space-sm);
   padding: var(--space-sm);
   border: var(--rule-thin) solid var(--color-rule);
@@ -352,6 +370,34 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-sm);
+}
+
+.importGroups {
+  display: grid;
+  gap: var(--space-md);
+  margin-block-start: var(--space-md);
+}
+
+.importGroup {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.importGroup h3 {
+  margin: 0 0 var(--space-xs);
+  font-size: var(--text-sm);
+}
+
+.importGroup ul {
+  display: grid;
+  gap: var(--space-2xs);
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+}
+
+.importGroup p {
+  margin: 0;
+  color: var(--color-muted);
 }
 
 @container (min-width: 60rem) {
@@ -484,7 +530,6 @@
 @media (max-width: 39.99rem) {
   .actions {
     align-items: stretch;
-    flex-direction: column-reverse;
   }
   .actions > * {
     width: 100%;
@@ -492,5 +537,11 @@
   .searchLink {
     width: 100%;
     justify-content: center;
+  }
+  .courseActions {
+    width: 100%;
+  }
+  .courseActions > * {
+    flex: 1 1 auto;
   }
 }

@@ -25,6 +25,15 @@ const [compose, kustomization, api, mysql, redis, policies, ignore, ...launchers
     read("reset-data.bat"),
     read("scripts/dev.ts"),
   ])
+const [staff, staffProxy, staffTunnel, staffBootstrap, prepareRelease, verifyRelease] =
+  await Promise.all([
+    read("deploy/k8s/base/staff.yaml"),
+    read("apps/staff/nginx.conf"),
+    read("scripts/staff-k8s-tunnel.ps1"),
+    read("scripts/bootstrap-k8s-staff.ps1"),
+    read("scripts/prepare-k8s-release.ts"),
+    read("scripts/verify-k8s-release.ts"),
+  ])
 
 requireText(compose, '"127.0.0.1:3307:3306"', "Compose MySQL loopback binding")
 requireText(compose, '"127.0.0.1:6380:6379"', "Compose Redis loopback binding")
@@ -32,11 +41,26 @@ requireText(redis, "--maxmemory-policy noeviction", "Redis fail-closed memory po
 requireText(api, "type: Recreate", "API security-boundary rollout")
 requireText(policies, 'policyTypes: ["Ingress", "Egress"]', "default-deny policy")
 requireText(kustomization, "order: fifo", "policy-first Kustomize ordering")
+requireText(kustomization, "base/staff.yaml", "Staff workload")
+requireText(policies, "name: staff-boundary", "Staff network boundary")
+requireText(policies, "app.kubernetes.io/name: regchula-staff", "Staff network selector")
+requireText(staff, "readOnlyRootFilesystem: true", "Staff immutable filesystem")
+requireText(staff, 'drop: ["ALL"]', "Staff dropped capabilities")
+requireText(staffProxy, "client_max_body_size 64k;", "Staff default request limit")
+requireText(staffProxy, "client_max_body_size 64m;", "Staff catalog upload limit")
+requireText(staffProxy, "proxy_request_buffering off;", "Streaming catalog uploads")
+requireText(staffTunnel, "'--address', '127.0.0.1'", "Staff loopback tunnel")
+requireText(staffTunnel, "'service/regchula-staff', '5174:80'", "Staff tunnel target")
+requireText(staffBootstrap, "RedirectStandardInput = $true", "Bootstrap password input")
+requireText(staffBootstrap, "--stdin", "Bootstrap stdin option")
+requireText(prepareRelease, 'imageFor("regchula-staff")', "Staff release image")
+requireText(verifyRelease, '["staff", release.staff, 1]', "Staff release verification")
 if (kustomization.indexOf("base/network-policy.yaml") > kustomization.indexOf("base/api.yaml")) {
   throw new Error("NetworkPolicy must be listed before workloads")
 }
 for (const [path, source] of [
   ["api.yaml", api],
+  ["staff.yaml", staff],
   ["mysql.yaml", mysql],
   ["redis.yaml", redis],
 ] as const) {
@@ -57,6 +81,8 @@ requireText(
 requireText(k8sStartup, '"!release_dir!\\jobs.yaml"', "Bootstrap release image")
 requireText(k8sStartup, '"!release_dir!\\api.yaml"', "API release image")
 requireText(k8sStartup, '"!release_dir!\\web.yaml"', "Web release image")
+requireText(k8sStartup, '"!release_dir!\\staff.yaml"', "Staff release image")
+requireText(k8sStartup, "scripts\\staff-k8s-tunnel.ps1", "Staff tunnel startup")
 requireText(k8sStartup, "scripts/verify-k8s-release.ts", "Ready replica release verification")
 for (const path of [
   ".env.local",
@@ -64,7 +90,9 @@ for (const path of [
   ".env.k8s.mysql.local",
   ".env.k8s.redis.local",
 ]) {
-  requireText(ignore, path, "Secret-file ignore rule")
+  if (!ignore.split(/\r?\n/).includes(".env.*")) {
+    requireText(ignore, path, "Secret-file ignore rule")
+  }
 }
 
 console.log("[deployment] Loopback, secret, rollout, memory, and policy boundaries passed")

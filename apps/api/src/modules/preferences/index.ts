@@ -101,7 +101,7 @@ export const preferencesModule = new Elysia({ name: "preferences" })
     "/api/v1/announcements",
     {
       cookie: sessionCookieSchema,
-      detail: { tags: ["Dashboard"], summary: "Active demo announcements" },
+      detail: { tags: ["Dashboard"], summary: "Active announcements" },
     },
     async ({ cookie, request }) => {
       const auth = await studentOrProblem(cookie as SessionCookieJar, request)
@@ -111,7 +111,7 @@ export const preferencesModule = new Elysia({ name: "preferences" })
         .from(announcements)
         .where(eq(announcements.active, true))
         .orderBy(asc(announcements.sortOrder), asc(announcements.id))
-      return { data: items }
+      return { data: items.filter((item) => !item.title.startsWith("[ข้อมูลตัวอย่าง]")) }
     },
   )
   .get(

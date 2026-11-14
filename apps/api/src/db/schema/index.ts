@@ -17,6 +17,13 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core"
+import { registrationAccessCodes, registrationAccessGrants, studentRegistrationProfiles } from "./registration-access"
+import { catalogRevision, staffCatalogPreviews, termRegistrationWindows } from "./staff-catalog"
+import { staffAuditEvents, staffSessions, staffUsers, studentAdvisors } from "./staff"
+
+export { registrationAccessCodes, registrationAccessGrants, studentRegistrationProfiles }
+export { catalogRevision, staffCatalogPreviews, termRegistrationWindows }
+export { staffAuditEvents, staffSessions, staffUsers, studentAdvisors }
 
 const createdAt = () => timestamp("created_at", { mode: "date" }).defaultNow().notNull()
 const updatedAt = () =>
@@ -192,6 +199,15 @@ export const students = mysqlTable("students", {
   lastLoginAt: timestamp("last_login_at", { mode: "date" }).defaultNow().notNull(),
 })
 
+export const studentCredentials = mysqlTable("student_credentials", {
+  studentId: varchar("student_id", { length: 32 })
+    .primaryKey()
+    .references(() => students.studentId, { onDelete: "cascade", onUpdate: "cascade" }),
+  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  active: boolean("active").default(true).notNull(),
+  updatedAt: updatedAt(),
+})
+
 export const authChallengeConsumptions = mysqlTable(
   "auth_challenge_consumptions",
   {
@@ -361,7 +377,7 @@ export const registrations = mysqlTable(
     sectionId: bigint("section_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => sections.id, { onDelete: "restrict", onUpdate: "cascade" }),
-    status: mysqlEnum("status", ["active", "dropped", "withdrawn"]).notNull(),
+    status: mysqlEnum("status", ["active", "dropped", "withdrawn", "removed"]).notNull(),
     credits: decimal("credits", { precision: 4, scale: 1, mode: "number" }).notNull(),
     registeredAt: timestamp("registered_at", { mode: "date" }).defaultNow().notNull(),
     updatedAt: updatedAt(),
@@ -385,7 +401,7 @@ export const registrationEvents = mysqlTable(
       .notNull()
       .references(() => registrations.id, { onDelete: "restrict", onUpdate: "cascade" }),
     studentId: varchar("student_id", { length: 32 }).notNull(),
-    action: mysqlEnum("action", ["registered", "dropped", "withdrawn", "reactivated"]).notNull(),
+    action: mysqlEnum("action", ["registered", "dropped", "withdrawn", "reactivated", "removed"]).notNull(),
     snapshot: json("snapshot").$type<Record<string, unknown>>().notNull(),
     createdAt: createdAt(),
   },
@@ -499,6 +515,7 @@ export const schema = {
   sectionMeetings,
   courseReviews,
   students,
+  studentCredentials,
   authChallengeConsumptions,
   mockAuthState,
   mockAuthShards,
@@ -512,4 +529,14 @@ export const schema = {
   withdrawalRequests,
   idempotencyRecords,
   announcements,
+  staffUsers,
+  staffSessions,
+  studentAdvisors,
+  staffAuditEvents,
+  termRegistrationWindows,
+  staffCatalogPreviews,
+  catalogRevision,
+  studentRegistrationProfiles,
+  registrationAccessCodes,
+  registrationAccessGrants,
 }

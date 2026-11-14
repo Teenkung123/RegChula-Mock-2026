@@ -129,6 +129,9 @@ async function mockRegistration(page: Page) {
       })
     if (method === "GET") {
       if (path === "/api/v1/terms") return ok([term])
+      if (path === "/api/v1/registration-access")
+        return ok({ termId: term.id, status: "open", authorized: true })
+      if (path === "/api/v1/favorites") return ok([])
       if (path === "/api/v1/me")
         return ok({
           studentId: "warnings-mocked",

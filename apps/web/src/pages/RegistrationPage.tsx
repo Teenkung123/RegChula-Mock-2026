@@ -1,4 +1,3 @@
-import { randomId } from "../lib/random-id"
 import {
   AlertDialog,
   Chip,
@@ -20,11 +19,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, ChevronDown, CirclePlus, Search, Trash2 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router"
-import { Button, SelectField, Status } from "../components/ui"
-import { isAdvisoryIssue, RegistrationWarnings } from "../components/RegistrationWarnings"
 import type { CourseReferenceContext } from "../components/CourseReference"
-import { courseLabel, courseSearchText } from "../lib/course-label"
-import { occupiedSeatCount, sectionSeatLabel } from "../lib/section-seats"
+import { isAdvisoryIssue, RegistrationWarnings } from "../components/RegistrationWarnings"
+import { Button, SelectField, Status } from "../components/ui"
 import { useI18n } from "../i18n"
 import {
   ApiError,
@@ -34,7 +31,13 @@ import {
   getRegistrations,
   previewBatchRegistration,
 } from "../lib/api"
+import { courseLabel, courseSearchText } from "../lib/course-label"
+import { useFavorites } from "../lib/personal-planning"
+import { randomId } from "../lib/random-id"
+import { MAX_REGISTRATION_CREDITS } from "../lib/registration-credits"
+import { occupiedSeatCount, sectionSeatLabel } from "../lib/section-seats"
 import pageStyles from "./pages.module.css"
+import { RegistrationAccess } from "./RegistrationAccess"
 import styles from "./RegistrationPage.module.css"
 
 type SectionRelation = "only" | "to" | "or" | "T" | "G"
@@ -283,15 +286,25 @@ function RowFeedback({
 }
 
 export function RegistrationPage() {
+  return <RegistrationAccess>{() => <RegistrationEditor />}</RegistrationAccess>
+}
+
+function RegistrationEditor() {
   const { courseName, language, text } = useI18n()
   const queryClient = useQueryClient()
   const registrations = useQuery({ queryKey: ["registrations"], queryFn: getRegistrations })
+  const favorites = useFavorites(registrations.data?.term?.id)
   const [rows, setRows] = useState<DraftRow[]>([newDraftRow()])
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
+  const registrationsRef = useRef(registrations.data?.registrations)
+  registrationsRef.current = registrations.data?.registrations
   const [lookupRowId, setLookupRowId] = useState<string | null>(null)
   const [lookupQuery, setLookupQuery] = useState("")
   const [debouncedLookup, setDebouncedLookup] = useState("")
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [saveOpen, setSaveOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [review, setReview] = useState<BatchRegistrationPreviewDto | null>(null)
   const detailRequests = useRef(new Map<string, string>())
   const saveAttempt = useRef<{
@@ -315,6 +328,17 @@ export function RegistrationPage() {
   const activeRegistrations =
     registrations.data?.registrations.filter((registration) => registration.status === "active") ??
     []
+  const existingCourseCodes = new Set([
+    ...activeRegistrations.map((registration) => registration.courseCode),
+    ...rows.flatMap((row) => (row.course ? [row.course.courseCode] : [])),
+  ])
+  const favoritesToImport = (favorites.data ?? []).filter(
+    (course) => course.offered && !existingCourseCodes.has(course.courseCode),
+  )
+  const existingFavorites = (favorites.data ?? []).filter(
+    (course) => course.offered && existingCourseCodes.has(course.courseCode),
+  )
+  const unavailableFavorites = (favorites.data ?? []).filter((course) => !course.offered)
   const activeCredits = activeRegistrations.reduce(
     (total, registration) => total + registration.credits,
     0,
@@ -393,9 +417,13 @@ export function RegistrationPage() {
           zh: "该课程已在列表中",
         }),
       )
-    if (totalCredits > 21)
+    if (totalCredits > MAX_REGISTRATION_CREDITS)
       issues.push(
-        text({ th: "หน่วยกิตรวมเกิน 21 หน่วยกิต", en: "Total credits exceed 21", zh: "总学分超过21" }),
+        text({
+          th: `หน่วยกิตรวมเกิน ${MAX_REGISTRATION_CREDITS} หน่วยกิต`,
+          en: `Total credits exceed ${MAX_REGISTRATION_CREDITS}`,
+          zh: `总学分超过${MAX_REGISTRATION_CREDITS}`,
+        }),
       )
     return issues
   }
@@ -482,6 +510,81 @@ export function RegistrationPage() {
       )
     }
   }
+
+  const importPlan = useMutation({
+    mutationFn: async () => {
+      const term = registrations.data?.term
+      if (!term || !favorites.data) throw new Error("The favorites list is unavailable")
+      const offered = favoritesToImport
+      const results = await Promise.allSettled(
+        offered.map((course) =>
+          getCourse(course.courseCode, {
+            academicYear: term.academicYear,
+            semester: term.semester,
+          }),
+        ),
+      )
+      return {
+        details: results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
+        unavailable: [
+          ...favorites.data.filter((course) => !course.offered).map((course) => course.courseCode),
+          ...offered.flatMap((course, index) =>
+            results[index]?.status === "rejected" ? [course.courseCode] : [],
+          ),
+        ],
+      }
+    },
+    onSuccess({ details, unavailable }) {
+      const existing = new Set([
+        ...rowsRef.current.flatMap((row) => (row.course ? [row.course.courseCode] : [])),
+        ...(registrationsRef.current ?? [])
+          .filter((item) => item.status === "active")
+          .map((item) => item.courseCode),
+      ])
+      const additions = details
+        .filter((detail) => !existing.has(detail.offering.courseCode))
+        .map((detail) => ({
+          ...newDraftRow(),
+          course: detail.offering,
+          query: `${detail.offering.courseCode} · ${courseName(detail.offering)}`,
+          sections: detail.sections,
+        }))
+      if (additions.length) {
+        setRows((current) => [
+          ...current.filter((row) => row.course || row.query.trim()),
+          ...additions,
+        ])
+      }
+      const description = unavailable.length
+        ? text({
+            th: `นำเข้าไม่ได้: ${unavailable.join(", ")}`,
+            en: `Could not import: ${unavailable.join(", ")}`,
+            zh: `无法导入：${unavailable.join(", ")}`,
+          })
+        : text({
+            th: "เลือกตอนเรียนและบันทึกเมื่อพร้อม",
+            en: "Choose sections and save when ready.",
+            zh: "请选择班次，准备好后保存。",
+          })
+      toast[unavailable.length ? "danger" : "success"](
+        text({
+          th: `นำเข้า ${additions.length} รายวิชา`,
+          en: `Imported ${additions.length} courses`,
+          zh: `已导入 ${additions.length} 门课程`,
+        }),
+        { description, timeout: 6_000 },
+      )
+    },
+    onError(error) {
+      toast.danger(
+        text({ th: "นำเข้ารายการไม่ได้", en: "Could not import course list", zh: "无法导入课程列表" }),
+        {
+          description: error instanceof Error ? error.message : undefined,
+          timeout: 6_000,
+        },
+      )
+    },
+  })
 
   const applyRowErrors = (next: Map<string, string[]>) => {
     setRows((current) => current.map((row) => ({ ...row, errors: next.get(row.id) ?? [] })))
@@ -697,7 +800,9 @@ export function RegistrationPage() {
       >
         <div>
           <span>{text({ th: "หน่วยกิตหลังบันทึก", en: "Credits after save", zh: "保存后的学分" })}</span>
-          <strong>{totalCredits}/21</strong>
+          <strong>
+            {totalCredits}/{MAX_REGISTRATION_CREDITS}
+          </strong>
           <small>
             {text({ th: "คำนวณอัตโนมัติ", en: "Calculated automatically", zh: "自动计算" })}
           </small>
@@ -705,11 +810,15 @@ export function RegistrationPage() {
         <ProgressBar
           aria-label={text({ th: "หน่วยกิต", en: "Credits", zh: "学分" })}
           className={css(styles.creditMeter)}
-          maxValue={21}
-          value={Math.min(totalCredits, 21)}
+          maxValue={MAX_REGISTRATION_CREDITS}
+          value={Math.min(totalCredits, MAX_REGISTRATION_CREDITS)}
         >
           <ProgressBar.Track>
-            <ProgressBar.Fill style={{ width: `${Math.min(100, (totalCredits / 21) * 100)}%` }} />
+            <ProgressBar.Fill
+              style={{
+                width: `${Math.min(100, (totalCredits / MAX_REGISTRATION_CREDITS) * 100)}%`,
+              }}
+            />
           </ProgressBar.Track>
         </ProgressBar>
       </section>
@@ -723,6 +832,41 @@ export function RegistrationPage() {
           })}
         </Status>
       ) : null}
+      {favorites.isError ? (
+        <Status tone="error">
+          {text({
+            th: "โหลดรายวิชาที่ชื่นชอบไม่ได้",
+            en: "Could not load your favorite courses",
+            zh: "无法加载收藏课程",
+          })}{" "}
+          <Button onClick={() => void favorites.refetch()} type="button" variant="quiet">
+            {text({ th: "ลองอีกครั้ง", en: "Try again", zh: "重试" })}
+          </Button>
+        </Status>
+      ) : null}
+
+      <div className={styles.courseToolbar}>
+        <h2>{text({ th: "รายการรายวิชา", en: "Courses", zh: "课程" })}</h2>
+        <div className={styles.courseActions}>
+          <Button
+            disabled={!registrations.isSuccess || !favorites.data?.length || importPlan.isPending}
+            loading={importPlan.isPending}
+            onClick={() => setImportOpen(true)}
+            type="button"
+            variant="outline"
+          >
+            {text({ th: "นำเข้ารายวิชาที่ชื่นชอบ", en: "Import favorites", zh: "导入收藏课程" })}
+          </Button>
+          <Button
+            onClick={() => setRows((current) => [...current, newDraftRow()])}
+            type="button"
+            variant="outline"
+          >
+            <CirclePlus aria-hidden="true" size={17} />
+            {text({ th: "เพิ่มรายวิชา", en: "Add course", zh: "添加课程" })}
+          </Button>
+        </div>
+      </div>
 
       <section
         className={styles.repeater}
@@ -921,16 +1065,9 @@ export function RegistrationPage() {
 
       <div className={styles.actions}>
         <Button
-          onClick={() => setRows((current) => [...current, newDraftRow()])}
-          type="button"
-          variant="outline"
-        >
-          <CirclePlus aria-hidden="true" size={17} />
-          {text({ th: "เพิ่มรายวิชา", en: "Add course", zh: "添加课程" })}
-        </Button>
-
-        <Button
-          disabled={(!hasChanges && !saveAttempt.current) || saveMutation.isPending}
+          disabled={
+            (!hasChanges && !saveAttempt.current) || saveMutation.isPending || importPlan.isPending
+          }
           loading={saveMutation.isPending}
           onClick={openReview}
           type="button"
@@ -944,6 +1081,111 @@ export function RegistrationPage() {
           )}
         </Button>
       </div>
+
+      <AlertDialog.Backdrop
+        className={css(styles.dialogBackdrop)}
+        isDismissable={false}
+        isOpen={importOpen}
+        onOpenChange={setImportOpen}
+      >
+        <AlertDialog.Container className={css(styles.dialogContainer)} placement="center">
+          <AlertDialog.Dialog
+            aria-label={text({
+              th: "นำเข้ารายวิชาที่ชื่นชอบ",
+              en: "Import favorites",
+              zh: "导入收藏课程",
+            })}
+          >
+            <AlertDialog.Header>
+              <AlertDialog.Heading>
+                {text({
+                  th: "นำเข้ารายวิชาที่ชื่นชอบ?",
+                  en: "Import favorite courses?",
+                  zh: "导入收藏课程？",
+                })}
+              </AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              <p>
+                {text({
+                  th: "เพิ่มรายวิชาที่เปิดสอนในภาคปัจจุบันลงในรายการ โดยยังไม่ลงทะเบียน เลือกตอนเรียนและบันทึกเมื่อพร้อม",
+                  en: "Add courses offered this term to your draft. Choose sections and save when ready.",
+                  zh: "将本学期开设的课程加入草稿。请选择班次，准备好后保存。",
+                })}
+              </p>
+              <div className={styles.importGroups}>
+                {[
+                  {
+                    id: "import-courses",
+                    label: text({ th: "รายการที่จะนำเข้า", en: "To import", zh: "将导入" }),
+                    courses: favoritesToImport,
+                  },
+                  ...(existingFavorites.length
+                    ? [
+                        {
+                          id: "existing-courses",
+                          label: text({
+                            th: "มีในรายการแล้ว",
+                            en: "Already in your list",
+                            zh: "已在列表中",
+                          }),
+                          courses: existingFavorites,
+                        },
+                      ]
+                    : []),
+                  {
+                    id: "unavailable-courses",
+                    label: text({
+                      th: "ไม่เปิดสอนภาคนี้",
+                      en: "Not offered this term",
+                      zh: "本学期未开课",
+                    }),
+                    courses: unavailableFavorites,
+                  },
+                ].map((group) => (
+                  <section key={group.id} aria-labelledby={group.id} className={styles.importGroup}>
+                    <h3 id={group.id}>{group.label}</h3>
+                    {group.courses.length ? (
+                      <ul>
+                        {group.courses.map((course) => {
+                          const name = courseName({
+                            nameTh: course.nameTh ?? "",
+                            nameEn: course.nameEn ?? "",
+                          })
+                          return (
+                            <li key={course.courseCode}>
+                              <strong>{course.courseCode}</strong>
+                              {name ? ` · ${name}` : ""}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : (
+                      <p>{text({ th: "ไม่มี", en: "None", zh: "无" })}</p>
+                    )}
+                  </section>
+                ))}
+              </div>
+            </AlertDialog.Body>
+            <AlertDialog.Footer className={styles.dialogActions}>
+              <Button onClick={() => setImportOpen(false)} type="button" variant="quiet">
+                {text({ th: "ยกเลิก", en: "Cancel", zh: "取消" })}
+              </Button>
+              <Button
+                disabled={!favoritesToImport.length}
+                onClick={() => {
+                  setImportOpen(false)
+                  importPlan.mutate()
+                }}
+                type="button"
+                variant="primary"
+              >
+                {text({ th: "นำเข้า", en: "Import", zh: "导入" })}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
 
       <AlertDialog.Backdrop
         className={css(styles.dialogBackdrop)}

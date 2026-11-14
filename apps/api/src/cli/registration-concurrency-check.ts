@@ -1,4 +1,5 @@
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise"
+import { randomInt } from "node:crypto"
 import { ensureStudent } from "../modules/auth/service"
 import { commitRegistration, registrationPreview } from "../modules/registration/service"
 import { config } from "../config"
@@ -23,7 +24,12 @@ if (
 
 const courseCode = "9999998"
 const suffix = crypto.randomUUID().slice(0, 8)
-const students = [`seat-a-${suffix}`, `seat-b-${suffix}`]
+const testId = () => `99${String(randomInt(100_000_000)).padStart(8, "0")}`
+const students = [testId(), testId()]
+while (students[1] === students[0]) students[1] = testId()
+const advisorId = crypto.randomUUID()
+let studentsAvailable = false
+let advisorCreated = false
 let courseCreated = false
 let offeringId: number | null = null
 let sectionId: number | null = null
@@ -36,6 +42,13 @@ function tokenOf(result: Awaited<ReturnType<typeof registrationPreview>>): strin
 }
 
 try {
+  const [existingStudents] = await pool.query<CountRow[]>(
+    "SELECT COUNT(*) AS total FROM students WHERE student_id IN (?, ?)",
+    students,
+  )
+  if (Number(existingStudents[0]?.total) !== 0)
+    throw new Error("Generated fixture ID already exists")
+  studentsAvailable = true
   const [existingCourse] = await pool.query<CountRow[]>(
     "SELECT COUNT(*) AS total FROM courses WHERE course_code = ?",
     [courseCode],
@@ -53,6 +66,15 @@ try {
   )
   const termId = termRows[0]?.id
   if (!termId) throw new Error("Current term is not configured")
+  const [windows] = await pool.query<CountRow[]>(
+    "SELECT COUNT(*) AS total FROM term_registration_windows WHERE term_id = ? AND opens_at <= UTC_TIMESTAMP(3) AND closes_at > UTC_TIMESTAMP(3)",
+    [termId],
+  )
+  if (Number(windows[0]?.total) !== 1) {
+    throw new Error(
+      "Concurrency check requires an open current-term registration window in its isolated test database",
+    )
+  }
 
   await pool.query("INSERT INTO courses (course_code) VALUES (?)", [courseCode])
   courseCreated = true
@@ -76,7 +98,22 @@ try {
     [offeringId],
   )
   sectionId = section.insertId
+  await pool.query(
+    "INSERT INTO staff_users (id, username, display_name, role, password_hash) VALUES (?, ?, ?, 'advisor', ?)",
+    [advisorId, `fixture-seat-${suffix}`, "Concurrency fixture", "!"],
+  )
+  advisorCreated = true
   await Promise.all(students.map(ensureStudent))
+  for (const studentId of students) {
+    await pool.query(
+      "INSERT INTO student_registration_profiles (student_id, first_term_id, academic_level) VALUES (?, ?, 'undergraduate')",
+      [studentId, termId],
+    )
+    await pool.query("INSERT INTO student_advisors (student_id, staff_id) VALUES (?, ?)", [
+      studentId,
+      advisorId,
+    ])
+  }
 
   const tokens = await Promise.all(
     students.map(async (studentId) =>
@@ -125,19 +162,22 @@ try {
     "[concurrency] The successful confirmation replayed through a fresh key without a second write",
   )
 } finally {
-  await pool.query(
-    [
-      "DELETE e FROM registration_events e",
-      "INNER JOIN registrations r ON r.id = e.registration_id",
-      "WHERE r.student_id IN (?, ?)",
-    ].join(" "),
-    students,
-  )
-  await pool.query("DELETE FROM idempotency_records WHERE student_id IN (?, ?)", students)
-  await pool.query("DELETE FROM registrations WHERE student_id IN (?, ?)", students)
-  await pool.query("DELETE FROM student_term_states WHERE student_id IN (?, ?)", students)
-  await pool.query("DELETE FROM student_preferences WHERE student_id IN (?, ?)", students)
-  await pool.query("DELETE FROM students WHERE student_id IN (?, ?)", students)
+  if (studentsAvailable) {
+    await pool.query(
+      [
+        "DELETE e FROM registration_events e",
+        "INNER JOIN registrations r ON r.id = e.registration_id",
+        "WHERE r.student_id IN (?, ?)",
+      ].join(" "),
+      students,
+    )
+    await pool.query("DELETE FROM idempotency_records WHERE student_id IN (?, ?)", students)
+    await pool.query("DELETE FROM registrations WHERE student_id IN (?, ?)", students)
+    await pool.query("DELETE FROM student_term_states WHERE student_id IN (?, ?)", students)
+    await pool.query("DELETE FROM student_preferences WHERE student_id IN (?, ?)", students)
+    await pool.query("DELETE FROM students WHERE student_id IN (?, ?)", students)
+  }
+  if (advisorCreated) await pool.query("DELETE FROM staff_users WHERE id = ?", [advisorId])
   await pool.query(
     "UPDATE mock_auth_state SET student_count = (SELECT COUNT(*) FROM students) WHERE id = 1",
   )

@@ -7,7 +7,6 @@ type MessageTable = Record<string, string>
 const messages: Record<AppLanguage, MessageTable> = {
   th: {
     "app.name": "RegChula",
-    "app.demo": "ระบบตัวอย่าง",
     "nav.work": "การทำงาน",
     "nav.manage": "จัดการ",
     "nav.plan": "แผนการเรียน",
@@ -43,7 +42,7 @@ const messages: Record<AppLanguage, MessageTable> = {
     "shell.toggleTheme": "สลับโหมดสว่างและมืด",
     "shell.appearance": "การแสดงผล",
     "shell.logout": "ออกจากระบบ",
-    "shell.importedData": "ข้อมูลรายวิชาจากไฟล์ที่นำเข้า · ระบบตัวอย่าง",
+    "shell.importedData": "ข้อมูลรายวิชาที่นำเข้า",
     "appearance.title": "การแสดงผลและการอ่าน",
     "appearance.subtitle": "ตั้งค่าภาษา ขนาดส่วนติดต่อ สี และรูปแบบหน้าจอให้เหมาะกับคุณ",
     "appearance.language": "ภาษาที่ใช้แสดงผล",
@@ -97,7 +96,6 @@ const messages: Record<AppLanguage, MessageTable> = {
   },
   en: {
     "app.name": "RegChula",
-    "app.demo": "Demo system",
     "nav.work": "Workspace",
     "nav.manage": "Manage",
     "nav.plan": "Plan",
@@ -133,7 +131,7 @@ const messages: Record<AppLanguage, MessageTable> = {
     "shell.toggleTheme": "Toggle light and dark mode",
     "shell.appearance": "Appearance",
     "shell.logout": "Sign out",
-    "shell.importedData": "Imported course data · demo system",
+    "shell.importedData": "Imported course data",
     "appearance.title": "Display and readability",
     "appearance.subtitle": "Set your language, interface size, colors, and layout.",
     "appearance.language": "Display language",
@@ -191,7 +189,6 @@ const messages: Record<AppLanguage, MessageTable> = {
   },
   zh: {
     "app.name": "RegChula",
-    "app.demo": "演示系统",
     "nav.work": "工作区",
     "nav.manage": "管理",
     "nav.plan": "学习计划",
@@ -227,7 +224,7 @@ const messages: Record<AppLanguage, MessageTable> = {
     "shell.toggleTheme": "切换浅色和深色模式",
     "shell.appearance": "显示设置",
     "shell.logout": "退出登录",
-    "shell.importedData": "已导入课程数据 · 演示系统",
+    "shell.importedData": "已导入课程数据",
     "appearance.title": "显示与阅读体验",
     "appearance.subtitle": "调整显示语言、界面大小、配色和页面布局。",
     "appearance.language": "显示语言",

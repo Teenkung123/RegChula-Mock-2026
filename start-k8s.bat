@@ -85,9 +85,10 @@ if not exist "tmp" mkdir "tmp"
 docker exec regchula-mysql mysqldump -uregchula -pregchula_dev --single-transaction --no-tablespaces --routines --triggers --events --hex-blob --default-character-set=utf8mb4 regchula > "tmp\regchula-k8s-seed.sql" || exit /b 1
 :seed_ready
 
-echo [RegChula] Building pinned local API and web images...
+echo [RegChula] Building pinned local API, web, and staff images...
 docker build -f apps/api/Dockerfile -t regchula-api:local . || exit /b 1
 docker build -f apps/web/Dockerfile -t regchula-web:local . || exit /b 1
+docker build -f apps/staff/Dockerfile -t regchula-staff:local . || exit /b 1
 set "release_id=!RANDOM!-!RANDOM!"
 "!BUN_EXE!" run scripts/prepare-k8s-release.ts !release_id! || exit /b 1
 set "release_dir=tmp\k8s-releases\!release_id!"
@@ -122,10 +123,13 @@ if errorlevel 1 (
 echo [RegChula] Starting three API and two web replicas...
 kubectl --context=docker-desktop apply -f "!release_dir!\api.yaml" || exit /b 1
 kubectl --context=docker-desktop apply -f "!release_dir!\web.yaml" || exit /b 1
-kubectl --context=docker-desktop -n regchula rollout restart deployment/regchula-api deployment/regchula-web || exit /b 1
+kubectl --context=docker-desktop apply -f "!release_dir!\staff.yaml" || exit /b 1
+kubectl --context=docker-desktop -n regchula rollout restart deployment/regchula-api deployment/regchula-web deployment/regchula-staff || exit /b 1
 kubectl --context=docker-desktop -n regchula rollout status deployment/regchula-api --timeout=180s || exit /b 1
 kubectl --context=docker-desktop -n regchula rollout status deployment/regchula-web --timeout=180s || exit /b 1
+kubectl --context=docker-desktop -n regchula rollout status deployment/regchula-staff --timeout=180s || exit /b 1
 "!BUN_EXE!" run scripts/verify-k8s-release.ts !release_id! || exit /b 1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\staff-k8s-tunnel.ps1" || exit /b 1
 
 kubectl --context=docker-desktop get --raw /apis/metrics.k8s.io/v1beta1 >nul 2>nul
 if errorlevel 1 (
@@ -139,6 +143,7 @@ if errorlevel 1 (
 echo.
 echo [RegChula] Web and API: http://localhost:5173
 echo [RegChula] OpenAPI:     http://localhost:5173/openapi
+echo [RegChula] Staff portal: http://localhost:5174
 echo [RegChula] Original Docker and Kubernetes volumes are both preserved.
 echo.
 if /i "%~1"=="public" (

@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test"
+import { randomStudentId, test } from "./identity"
+import { expect } from "@playwright/test"
 
 test("exam filters query announced slots and mobile controls persist in the URL", async ({
   page,
@@ -9,8 +10,8 @@ test("exam filters query announced slots and mobile controls persist in the URL"
   const login = await page.request.post("/api/v1/auth/login", {
     headers: { origin: "http://localhost:5173" },
     data: {
-      studentId: `exam-audit-${Date.now()}`,
-      password: "local-audit-only",
+      studentId: await randomStudentId(),
+      password: "12345678",
       challengeToken: challenge.token,
       challengeCode: challenge.code,
     },

@@ -153,7 +153,8 @@
   pointer-events: none;
 }
 
-.viewControls {
+.viewControls,
+.tiltControls {
   pointer-events: auto;
   box-shadow: var(--shadow-panel);
 }
@@ -163,7 +164,8 @@
   background: var(--color-surface);
 }
 
-.viewControls {
+.viewControls,
+.tiltControls {
   display: flex;
   gap: var(--space-3xs);
   padding: var(--space-3xs);
@@ -172,17 +174,34 @@
   background: var(--color-surface);
 }
 
-.viewControls button {
+.viewControls button,
+.tiltControls button {
   width: 2.75rem;
   min-width: 2.75rem;
   padding: var(--space-xs);
   border-color: transparent;
 }
 
+.tiltControls {
+  position: absolute;
+  z-index: 1;
+  inset-block-end: var(--space-sm);
+  inset-inline-start: var(--space-sm);
+}
+
+.tiltControls button {
+  min-height: 2.75rem;
+  background: var(--color-surface);
+}
+
 .north {
   position: absolute;
   inset-block-end: var(--space-sm);
   inset-inline-end: var(--space-sm);
+  z-index: 1;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: var(--space-xs);
   border: var(--rule-thin) solid var(--color-rule);
   border-radius: var(--radius-pill);
@@ -193,7 +212,11 @@
   font-weight: 700;
   line-height: 1;
   text-align: center;
-  pointer-events: none;
+  pointer-events: auto;
+}
+
+.north [data-map-heading] {
+  display: block;
 }
 
 .message {

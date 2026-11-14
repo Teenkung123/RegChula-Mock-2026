@@ -5,7 +5,6 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { db } from "../../db/client"
 import {
   academicTerms,
-  announcements,
   appSettings,
   catalogImports,
   courseOfferings,
@@ -14,7 +13,7 @@ import {
   sectionMeetings,
   sections,
 } from "../../db/schema"
-import { minimumMockRemainingSeats, mockSectionCapacity } from "./mock-availability"
+import { staffAuditEvents } from "../../db/schema/staff"
 import { normalizeCatalog } from "./normalize"
 import type {
   NormalizedCatalog,
@@ -61,12 +60,12 @@ function meetingRow(sectionId: number, meeting: NormalizedMeeting) {
   }
 }
 
-function sectionRow(offeringId: number, section: NormalizedSection) {
+export function importedSectionRow(offeringId: number, section: NormalizedSection) {
   return {
     offeringId,
     sectionNo: section.sectionNo,
     closed: section.closed,
-    capacity: mockSectionCapacity(section.capacity, section.baselineEnrolled),
+    capacity: section.capacity,
     baselineEnrolled: section.baselineEnrolled,
     note: section.note,
     genEdType: section.genEdType,
@@ -105,6 +104,8 @@ async function importNormalized(
   fileName: string,
   checksum: string,
   catalog: NormalizedCatalog,
+  staffId?: string,
+  expectedRevision?: number,
 ): Promise<ImportSummary> {
   const importMessage = [
     `Imported catalog with ${catalog.warnings.length} non-fatal warnings`,
@@ -139,6 +140,13 @@ async function importNormalized(
   let meetingCount = 0
 
   await db.transaction(async (tx) => {
+    const [result] = await tx.execute(sql`SELECT revision FROM catalog_revision WHERE id = 1 FOR UPDATE`)
+    const revisionRows = result as unknown as Array<{ revision: number }>
+    if (expectedRevision !== undefined && Number(revisionRows[0]?.revision) !== expectedRevision) {
+      throw new StaffCatalogPreviewStaleError("Catalog changed after the preview")
+    }
+    await tx.execute(sql`UPDATE catalog_revision SET revision = revision + 1 WHERE id = 1`)
+    await tx.execute(sql`SELECT value FROM app_settings WHERE \`key\` = 'current_term_id' FOR UPDATE`)
     await tx
       .insert(academicTerms)
       .values([...termDefinitions.values()].map((term) => ({ ...term, active: true })))
@@ -248,7 +256,7 @@ async function importNormalized(
     for (const batch of chunks(normalizedSections)) {
       await tx
         .insert(sections)
-        .values(batch.map(({ offeringId, section }) => sectionRow(offeringId, section)))
+        .values(batch.map(({ offeringId, section }) => importedSectionRow(offeringId, section)))
         .onDuplicateKeyUpdate({
           set: {
             closed: sql`values(${sections.closed})`,
@@ -278,20 +286,6 @@ async function importNormalized(
       if (!id) throw new Error(`Section id missing for ${offeringId}/${section.sectionNo}`)
       return id
     })
-    for (const batch of chunks(touchedSectionIds)) {
-      await tx
-        .update(sections)
-        .set({
-          capacity: sql`${sections.baselineEnrolled} + ${sections.localActive} + ${minimumMockRemainingSeats}`,
-        })
-        .where(
-          and(
-            inArray(sections.id, batch),
-            eq(sections.closed, false),
-            sql`${sections.capacity} <= ${sections.baselineEnrolled} + ${sections.localActive}`,
-          ),
-        )
-    }
     for (const batch of chunks(touchedSectionIds)) {
       await tx.delete(sectionMeetings).where(inArray(sectionMeetings.sectionId, batch))
     }
@@ -360,25 +354,6 @@ async function importNormalized(
       }
     }
 
-    const existingAnnouncements = await tx
-      .select({ id: announcements.id })
-      .from(announcements)
-      .limit(1)
-    if (existingAnnouncements.length === 0) {
-      await tx.insert(announcements).values([
-        {
-          title: "[ข้อมูลตัวอย่าง] เปิดระบบทดลองลงทะเบียน",
-          body: "เลือกภาคการศึกษา ตรวจสอบตอนเรียน และยืนยันรายการก่อนลงทะเบียนทุกครั้ง",
-          sortOrder: 10,
-        },
-        {
-          title: "[ข้อมูลตัวอย่าง] ตรวจสอบตารางเรียน",
-          body: "ลงทะเบียนรายวิชาที่เวลาเรียนหรือเวลาสอบทับซ้อนได้ โดยระบบจะแสดงคำเตือนให้ตรวจสอบ",
-          sortOrder: 20,
-        },
-      ])
-    }
-
     await tx
       .insert(catalogImports)
       .values({
@@ -405,6 +380,15 @@ async function importNormalized(
           importedAt: new Date(),
         },
       })
+
+    if (staffId) {
+      await tx.insert(staffAuditEvents).values({
+        staffId,
+        action: "import",
+        target: `catalog:${checksum}`,
+        details: { courseCount: catalog.offerings.length, sectionCount, warningCount: catalog.warnings.length },
+      })
+    }
   })
 
   return {
@@ -428,6 +412,21 @@ export interface ImportSummary {
   meetingCount: number
   reviewCount: number
   warningCount: number
+}
+
+export class StaffCatalogPreviewStaleError extends Error {}
+
+/** Import an already validated upload without writing a temporary catalog file. */
+export async function importCatalogUpload(
+  checksum: string,
+  catalog: NormalizedCatalog,
+  staffId: string,
+  expectedRevision: number,
+): Promise<ImportSummary> {
+  if (catalog.conflicts.length || catalog.offerings.length === 0) {
+    throw new Error("Catalog must contain offerings and no conflicts")
+  }
+  return importNormalized("staff-upload.json", checksum, catalog, staffId, expectedRevision)
 }
 
 export async function importCatalogFile(path: string, force = false): Promise<ImportSummary> {

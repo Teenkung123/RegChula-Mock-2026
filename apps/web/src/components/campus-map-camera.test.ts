@@ -1,15 +1,20 @@
-import { PerspectiveCamera, Vector3 } from "three"
+﻿import { PerspectiveCamera, Vector3 } from "three"
 import { describe, expect, it } from "vitest"
 import {
-  applyNorthUpCamera,
+  applyMapCamera,
   clampMapView,
   fitMapView,
   interiorBounds,
   MAP_CAMERA_CLEARANCE,
   MAP_CLIP_MARGIN,
+  MAP_MAX_TILT,
   MAP_VERTICAL_FOV,
   type MapView,
+  mapOrientation,
+  mapPointAtViewport,
   panMapView,
+  panMapViewScreen,
+  rotateMapView,
   zoomMapView,
 } from "./campus-map-camera"
 
@@ -37,6 +42,92 @@ function expectInside(view: MapView, aspect: number) {
 }
 
 describe("campus map camera invariants", () => {
+  it.each(aspects)(
+    "contains real terrain/roof corner rays across the full heading and tilt range at aspect %s",
+    (aspect) => {
+      const camera = new PerspectiveCamera()
+      const bounds = interiorBounds(ground)
+      for (const yaw of [0, 30, 90, 165, 230, 315, 359.9]) {
+        for (const tilt of [0, 15, 30, MAP_MAX_TILT]) {
+          for (const spanY of [90, 600, 100000]) {
+            const view = clampMapView(
+              { x: yaw % 2 ? 1e6 : -1e6, y: tilt % 2 ? 1e6 : -1e6, spanY, yaw, tilt },
+              ground,
+              aspect,
+              modelHeights,
+            )
+            applyMapCamera(camera, view, aspect, modelHeights)
+            expect(camera.position.y).toBeGreaterThanOrEqual(
+              modelHeights.max + MAP_CAMERA_CLEARANCE - 1e-8,
+            )
+            for (const x of [-1, 1]) {
+              for (const y of [-1, 1]) {
+                for (const altitude of [modelHeights.min, 0, modelHeights.max]) {
+                  const point = intersectDatum(camera, x, y, altitude)
+                  expect(point.x).toBeGreaterThanOrEqual(bounds.minX - 1e-7)
+                  expect(point.x).toBeLessThanOrEqual(bounds.maxX + 1e-7)
+                  expect(-point.z).toBeGreaterThanOrEqual(bounds.minY - 1e-7)
+                  expect(-point.z).toBeLessThanOrEqual(bounds.maxY + 1e-7)
+                  const projected = point.clone().project(camera)
+                  expect(projected.z).toBeGreaterThan(-1)
+                  expect(projected.z).toBeLessThan(1)
+                }
+                const expected = mapPointAtViewport(
+                  view,
+                  aspect,
+                  { x: (x + 1) / 2, y: (1 - y) / 2 },
+                  modelHeights,
+                )
+                const actual = intersectDatum(camera, x, y, modelHeights.min)
+                expect(actual.x).toBeCloseTo(expected.x, 7)
+                expect(-actual.z).toBeCloseTo(expected.y, 7)
+              }
+            }
+          }
+        }
+      }
+    },
+  )
+
+  it("wraps heading continuously over multiple turns and clamps tilt at overhead and 45°", () => {
+    const view = { x: 0, y: 0, spanY: 600, yaw: 350, tilt: 30 }
+    expect(mapOrientation(rotateMapView(view, 30, 100, ground, 1))).toEqual({ yaw: 20, tilt: 45 })
+    expect(mapOrientation(rotateMapView(view, -1080, -100, ground, 1))).toEqual({
+      yaw: 350,
+      tilt: 0,
+    })
+    expect(mapOrientation({ yaw: Infinity, tilt: NaN })).toEqual({ yaw: 0, tilt: 0 })
+    const camera = new PerspectiveCamera()
+    applyMapCamera(camera, view, 1, modelHeights)
+    const before = camera.quaternion.clone()
+    applyMapCamera(camera, { ...view, yaw: 350 + 360 * 10 }, 1, modelHeights)
+    expect(Math.abs(before.dot(camera.quaternion))).toBeCloseTo(1, 14)
+  })
+
+  it.each([0, 45, 90, 180, 270, 350])(
+    "pans along screen axes and keeps zoom anchored under tilt at heading %s",
+    (yaw) => {
+      const view = { x: 0, y: 0, spanY: 600, yaw, tilt: 40 }
+      const camera = new PerspectiveCamera()
+      const pannedRight = panMapViewScreen(view, 0.05, 0, ground, 1.5, modelHeights)
+      applyMapCamera(camera, pannedRight, 1.5, modelHeights)
+      const oldCenter = new Vector3(view.x, modelHeights.min, -view.y).project(camera)
+      expect(oldCenter.x).toBeLessThan(0)
+      expect(oldCenter.y).toBeCloseTo(0, 12)
+      const pannedDown = panMapViewScreen(view, 0, 0.05, ground, 1.5, modelHeights)
+      applyMapCamera(camera, pannedDown, 1.5, modelHeights)
+      oldCenter.set(view.x, modelHeights.min, -view.y).project(camera)
+      expect(oldCenter.x).toBeCloseTo(0, 12)
+      expect(oldCenter.y).toBeGreaterThan(0)
+      const anchor = { x: 0.65, y: 0.4 }
+      const expected = mapPointAtViewport(view, 1.5, anchor, modelHeights)
+      const next = zoomMapView(view, 0.5, ground, 1.5, anchor, modelHeights)
+      const actual = mapPointAtViewport(next, 1.5, anchor, modelHeights)
+      expect(actual.x).toBeCloseTo(expected.x, 10)
+      expect(actual.y).toBeCloseTo(expected.y, 10)
+    },
+  )
+
   it.each([0.01, ...aspects, 100])(
     "contains actual perspective corner rays after pan/zoom at aspect %s",
     (aspect) => {
@@ -45,7 +136,7 @@ describe("campus map camera invariants", () => {
       for (let index = 0; index < 20; index++) {
         view = zoomMapView(view, index % 2 ? 100 : 0.001, ground, aspect, { x: 0, y: 1 })
         view = panMapView(view, index % 3 ? 1e6 : -1e6, index % 5 ? -1e6 : 1e6, ground, aspect)
-        applyNorthUpCamera(camera, view, aspect, modelHeights)
+        applyMapCamera(camera, view, aspect, modelHeights)
         expect(camera.position.y).toBeGreaterThanOrEqual(modelHeights.max + MAP_CAMERA_CLEARANCE)
         for (const x of [-1, 1]) {
           for (const y of [-1, 1]) {
@@ -65,12 +156,12 @@ describe("campus map camera invariants", () => {
 
   it("preserves close zoom with a narrower lens without crossing the roof-safe altitude", () => {
     const camera = new PerspectiveCamera()
-    applyNorthUpCamera(camera, { x: 0, y: 0, spanY: 90 }, 1, modelHeights)
+    applyMapCamera(camera, { x: 0, y: 0, spanY: 90 }, 1, modelHeights)
     expect(camera.position.y).toBeCloseTo(modelHeights.max + MAP_CAMERA_CLEARANCE)
     expect(camera.fov).toBeGreaterThan(15)
     expect(camera.fov).toBeLessThan(17)
     expect(camera.near).toBeCloseTo(MAP_CAMERA_CLEARANCE - MAP_CLIP_MARGIN)
-    applyNorthUpCamera(camera, { x: 0, y: 0, spanY: 600 }, 1, modelHeights)
+    applyMapCamera(camera, { x: 0, y: 0, spanY: 600 }, 1, modelHeights)
     expect(camera.fov).toBeCloseTo(MAP_VERTICAL_FOV)
     expect(camera.position.y).toBeGreaterThan(modelHeights.max + MAP_CAMERA_CLEARANCE)
   })
@@ -81,10 +172,10 @@ describe("campus map camera invariants", () => {
       2 *
       Math.tan((MAP_VERTICAL_FOV * Math.PI) / 360) *
       (modelHeights.max + MAP_CAMERA_CLEARANCE - modelHeights.min)
-    applyNorthUpCamera(camera, { x: 0, y: 0, spanY: transition - 0.0001 }, 1, modelHeights)
+    applyMapCamera(camera, { x: 0, y: 0, spanY: transition - 0.0001 }, 1, modelHeights)
     const fov = camera.fov
     const altitude = camera.position.y
-    applyNorthUpCamera(camera, { x: 0, y: 0, spanY: transition + 0.0001 }, 1, modelHeights)
+    applyMapCamera(camera, { x: 0, y: 0, spanY: transition + 0.0001 }, 1, modelHeights)
     expect(camera.fov - fov).toBeLessThan(0.001)
     expect(camera.position.y - altitude).toBeLessThan(0.001)
   })
@@ -93,7 +184,7 @@ describe("campus map camera invariants", () => {
     "keeps roofs and terrain in the tight clip range, with centimetre precision at span %s",
     (spanY) => {
       const camera = new PerspectiveCamera()
-      applyNorthUpCamera(camera, { x: 0, y: 0, spanY }, 1, modelHeights)
+      applyMapCamera(camera, { x: 0, y: 0, spanY }, 1, modelHeights)
       for (const altitude of [modelHeights.min, modelHeights.max]) {
         const point = new Vector3(0, altitude, 0).project(camera)
         expect(point.z).toBeGreaterThan(-1)
@@ -118,7 +209,7 @@ describe("campus map camera invariants", () => {
         { x: 600, y: 580 },
       ]
       const view = fitMapView(route, ground, aspect)
-      applyNorthUpCamera(camera, view, aspect, modelHeights)
+      applyMapCamera(camera, view, aspect, modelHeights)
       for (const point of route) {
         for (const altitude of [1.8, 12]) {
           const projected = new Vector3(point.x, altitude, -point.y).project(camera)
@@ -193,7 +284,7 @@ describe("campus map camera invariants", () => {
     for (const aspect of aspects) {
       camera.rotation.set(0.5, 0.8, 1.2)
       const view = fitMapView([{ x: 0, y: 0 }], ground, aspect)
-      applyNorthUpCamera(camera, view, aspect, { min: -8, max: 275 })
+      applyMapCamera(camera, view, aspect, { min: -8, max: 275 })
       const direction = camera.getWorldDirection(new Vector3())
       expect(direction.x).toBeCloseTo(0, 14)
       expect(direction.y).toBeCloseTo(-1, 14)

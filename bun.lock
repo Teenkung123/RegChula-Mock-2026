@@ -30,6 +30,28 @@
         "typescript": "6.0.3",
       },
     },
+    "apps/staff": {
+      "name": "@regchula/staff",
+      "dependencies": {
+        "@fontsource-variable/anuphan": "5.3.0",
+        "@fontsource-variable/noto-sans-thai": "5.3.0",
+        "@heroui/react": "3.2.4",
+        "@heroui/styles": "3.2.4",
+        "lucide-react": "1.39.0",
+        "react": "19.2.8",
+        "react-dom": "19.2.8",
+        "react-router": "7.18.3",
+      },
+      "devDependencies": {
+        "@tailwindcss/vite": "4.3.3",
+        "@types/react": "19.2.18",
+        "@types/react-dom": "19.2.5",
+        "@vitejs/plugin-react": "6.1.1",
+        "tailwindcss": "4.3.3",
+        "typescript": "6.0.3",
+        "vite": "8.2.2",
+      },
+    },
     "apps/web": {
       "name": "@regchula/web",
       "dependencies": {
@@ -274,6 +296,8 @@
     "@regchula/api": ["@regchula/api@workspace:apps/api"],
 
     "@regchula/appearance": ["@regchula/appearance@workspace:packages/appearance"],
+
+    "@regchula/staff": ["@regchula/staff@workspace:apps/staff"],
 
     "@regchula/web": ["@regchula/web@workspace:apps/web"],
 

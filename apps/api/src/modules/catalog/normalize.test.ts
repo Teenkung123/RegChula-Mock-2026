@@ -52,6 +52,12 @@ const baseSection = () => {
 }
 
 describe("normalizeCatalog", () => {
+  it("preserves explicitly null review study programs in catalog exports", () => {
+    const input = { datasets: [{ academicYear: 2568, semester: 2, studyProgram: "S", courses: [{
+      ...course, reviews: [{ ...course.reviews[0], studyProgram: null }],
+    }] }] }
+    expect(normalizeCatalog(input).reviews[0]?.studyProgram).toBeNull()
+  })
   it("merges study programs, meetings, notes, and open availability", () => {
     const input = {
       datasets: [

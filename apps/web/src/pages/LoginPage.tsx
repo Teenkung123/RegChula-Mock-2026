@@ -20,7 +20,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const [challengeCode, setChallengeCode] = useState("")
-  const [touched, setTouched] = useState(false)
+  const [touched, setTouched] = useState({ studentId: false, password: false, challenge: false })
 
   const loginMutation = useMutation({
     mutationFn: login,
@@ -28,14 +28,19 @@ export function LoginPage() {
       await queryClient.invalidateQueries({ queryKey: ["me"] })
       navigate("/dashboard", { replace: true })
     },
+    async onError() {
+      setChallengeCode("")
+      setTouched((value) => ({ ...value, challenge: false }))
+      await challenge.refetch()
+    },
   })
 
   if (me.isSuccess) return <Navigate to="/dashboard" replace />
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    setTouched(true)
-    if (!studentId.trim() || !password || !/^\d{4}$/.test(challengeCode)) return
+    setTouched({ studentId: true, password: true, challenge: true })
+    if (!/^\d{10}$/.test(studentId) || !password || !/^\d{4}$/.test(challengeCode)) return
     const challengeToken = challenge.data?.token
     if (!challengeToken) return
     loginMutation.mutate({ studentId, password, rememberMe, challengeCode, challengeToken })
@@ -54,7 +59,7 @@ export function LoginPage() {
   const challengeDigits = challenge.data?.code.split("") ?? []
   const challengeIsReady = challengeDigits.length === 4 && !challenge.isFetching
   const challengeEntryError =
-    touched && !/^\d{4}$/.test(challengeCode)
+    touched.challenge && !/^\d{4}$/.test(challengeCode)
       ? text({
           th: "กรอกตัวเลขให้ครบ 4 หลักตามรหัสด้านบน",
           en: "Enter all four digits shown above.",
@@ -66,16 +71,6 @@ export function LoginPage() {
       th: "นิสิตจะต้องดำเนินการด้วยตนเอง และห้ามดำเนินการแทนนิสิตผู้อื่น มิฉะนั้นนิสิตจะถูกลงโทษทางวินัย",
       en: "Students must complete registration themselves and must not act for another student. Violations may lead to disciplinary action.",
       zh: "学生必须自行办理选课，不得代替他人操作；违规者可能受到纪律处分。",
-    }),
-    text({
-      th: "ระบบจริงต้องยืนยันตัวตนผ่าน CUNET ก่อนอนุญาตให้ลงทะเบียน โหมดนี้เป็นข้อมูลจำลองในเครื่องเท่านั้น",
-      en: "A real deployment must verify identity through CUNET before registration; this mode uses local mock data only.",
-      zh: "正式部署必须先通过 CUNET 验证身份；此模式仅使用本地模拟数据。",
-    }),
-    text({
-      th: "สำนักงานการทะเบียนกำหนดให้นิสิตแต่ละคนยืนยันการลงทะเบียนเรียนได้ไม่เกินวันละ 10 ครั้ง",
-      en: "Each student may confirm registration no more than 10 times per day.",
-      zh: "每位学生每天确认选课不得超过 10 次。",
     }),
     text({
       th: "นิสิตต้องตรวจสอบผลการลงทะเบียนเรียนทันทีทุกครั้งหลังจากที่ทำการลงทะเบียนเรียนสาย เพิ่ม-ลดรายวิชา หรือเปลี่ยนตอนเรียนผ่านทางอินเทอร์เน็ตและควรพิมพ์ผลการลงทะเบียนเรียน (CR54) หลังหมดกำหนดการเพิ่ม-ลดรายวิชา เพื่อตรวจสอบและเก็บไว้เป็นหลักฐาน",
@@ -102,12 +97,12 @@ export function LoginPage() {
           RegChula
         </div>
         <div className={styles.heading}>
-          <h1>{text({ th: "เข้าสู่ระบบทดลอง", en: "Demo sign in", zh: "演示登录" })}</h1>
+          <h1>{text({ th: "เข้าสู่ระบบ", en: "Sign in", zh: "登录" })}</h1>
           <p>
             {text({
-              th: "โหมดจำลองในเครื่องนี้ให้เลือกรหัสนิสิตสำหรับโปรไฟล์ทดสอบเท่านั้น ไม่ได้ยืนยันตัวตนหรือเชื่อมต่อ CUNET",
-              en: "This local demo selects a student ID only as a test profile. It does not verify identity or connect to CUNET.",
-              zh: "此本地演示仅将学号用作测试配置，不验证身份，也不连接 CUNET。",
+              th: "กรอกรหัสนิสิตและรหัสผ่านเพื่อเข้าสู่ระบบ",
+              en: "Enter your student ID and password to sign in.",
+              zh: "请输入学号和密码登录。",
             })}
           </p>
         </div>
@@ -116,30 +111,31 @@ export function LoginPage() {
           <Field
             autoComplete="username"
             error={
-              touched && !studentId.trim()
+              touched.studentId && !/^\d{10}$/.test(studentId)
                 ? text({
-                    th: "กรอกรหัสนิสิตเพื่อระบุข้อมูลของคุณ",
-                    en: "Enter your student ID to identify your data.",
-                    zh: "请输入学号以识别你的数据。",
+                    th: "กรอกรหัสนิสิตให้ครบ 10 หลัก",
+                    en: "Enter your 10-digit student ID.",
+                    zh: "请输入 10 位学号。",
                   })
                 : undefined
             }
             id="student-id"
             label={text({ th: "รหัสนิสิต", en: "Student ID", zh: "学号" })}
-            maxLength={32}
-            onBlur={() => setTouched(true)}
+            inputMode="numeric"
+            maxLength={10}
+            onBlur={() => setTouched((value) => ({ ...value, studentId: true }))}
             onChange={(event) => setStudentId(event.target.value)}
             placeholder={text({
-              th: "เช่น 6630000000",
-              en: "For example, 6630000000",
-              zh: "例如 6630000000",
+              th: "รหัสนิสิต 10 หลัก",
+              en: "10-digit student ID",
+              zh: "10 位学号",
             })}
             value={studentId}
           />
           <Field
             autoComplete="current-password"
             error={
-              touched && !password
+              touched.password && !password
                 ? text({
                     th: "กรอกรหัสผ่านอย่างน้อย 1 ตัวอักษร",
                     en: "Enter at least one password character.",
@@ -147,15 +143,10 @@ export function LoginPage() {
                   })
                 : undefined
             }
-            helper={text({
-              th: "จำเป็นตามข้อกำหนดของหน้าลงทะเบียน แต่โหมดจำลองจะไม่จัดเก็บหรือตรวจสอบรหัสผ่านนี้",
-              en: "Required by the registration specification; this local mock does not store or verify it.",
-              zh: "选课规范要求填写；此本地模拟不会存储或验证该密码。",
-            })}
             id="password"
             label={text({ th: "รหัสผ่าน", en: "Password", zh: "密码" })}
             maxLength={128}
-            onBlur={() => setTouched(true)}
+            onBlur={() => setTouched((value) => ({ ...value, password: true }))}
             onChange={(event) => setPassword(event.target.value)}
             type="password"
             value={password}
@@ -183,8 +174,8 @@ export function LoginPage() {
           <p className={styles.sessionNote}>
             {text({
               th: "หากไม่เลือก ระบบจะออกจากระบบหลังไม่มีการใช้งาน 10 นาที",
-              en: "Without Remember Me, this demo signs out after 10 minutes of inactivity.",
-              zh: "未选择记住登录时，此演示会在 10 分钟无操作后退出登录。",
+              en: "Without Remember Me, you will be signed out after 10 minutes of inactivity.",
+              zh: "未选择记住登录时，系统会在 10 分钟无操作后退出登录。",
             })}
           </p>
           <div className={styles.challenge}>
@@ -192,36 +183,27 @@ export function LoginPage() {
               <div className={styles.challengeTitle}>
                 <strong>
                   {text({
-                    th: "รหัสภาพป้องกันบอต 4 หลัก",
-                    en: "Four-digit bot-check image",
-                    zh: "四位防机器人验证码",
+                    th: "รหัสยืนยัน 4 หลัก",
+                    en: "Four-digit verification code",
+                    zh: "四位验证码",
                   })}
                 </strong>
-                <span>{text({ th: "CAPTCHA สาธิต", en: "Demo CAPTCHA", zh: "演示 CAPTCHA" })}</span>
               </div>
-              <p id="challenge-demo-note">
-                {text({
-                  th: "ใช้ทดสอบขั้นตอนป้องกันบอตเท่านั้น ไม่ใช่การยืนยันตัวตนจริงของจุฬาฯ",
-                  en: "This only demonstrates a bot-check step; it is not real Chulalongkorn authentication.",
-                  zh: "这仅用于演示防机器人步骤，并非朱拉隆功大学的真实身份验证。",
-                })}
-              </p>
             </div>
             <div className={styles.challengeControls}>
               <div
                 aria-busy={challenge.isFetching}
-                aria-describedby="challenge-demo-note"
                 aria-label={
                   challengeIsReady
                     ? text({
-                        th: `รหัส CAPTCHA สำหรับระบบตัวอย่าง ${challengeDigits.join(" ")}`,
-                        en: `Demo CAPTCHA code ${challengeDigits.join(" ")}`,
-                        zh: `演示 CAPTCHA 验证码 ${challengeDigits.join(" ")}`,
+                        th: `รหัสยืนยัน ${challengeDigits.join(" ")}`,
+                        en: `Verification code ${challengeDigits.join(" ")}`,
+                        zh: `验证码 ${challengeDigits.join(" ")}`,
                       })
                     : text({
-                        th: "กำลังสร้างรหัส CAPTCHA สำหรับระบบตัวอย่าง",
-                        en: "Generating the demo CAPTCHA code",
-                        zh: "正在生成演示 CAPTCHA 验证码",
+                        th: "กำลังสร้างรหัสยืนยัน",
+                        en: "Generating verification code",
+                        zh: "正在生成验证码",
                       })
                 }
                 aria-live="polite"
@@ -243,15 +225,16 @@ export function LoginPage() {
               </div>
               <Button
                 aria-label={text({
-                  th: "สร้างรหัส CAPTCHA สำหรับระบบตัวอย่างใหม่",
-                  en: "Generate a new demo CAPTCHA code",
-                  zh: "生成新的演示 CAPTCHA 验证码",
+                  th: "สร้างรหัสยืนยันใหม่",
+                  en: "Generate a new verification code",
+                  zh: "生成新验证码",
                 })}
                 disabled={challenge.isFetching}
                 type="button"
                 variant="quiet"
                 onClick={() => {
                   setChallengeCode("")
+                  setTouched((value) => ({ ...value, challenge: false }))
                   void challenge.refetch()
                 }}
               >
@@ -280,7 +263,7 @@ export function LoginPage() {
               isDisabled={!challenge.data || challenge.isFetching}
               isInvalid={Boolean(challengeEntryError)}
               maxLength={4}
-              onBlur={() => setTouched(true)}
+              onBlur={() => setTouched((value) => ({ ...value, challenge: true }))}
               onChange={(value) => setChallengeCode(value.replace(/\D/g, ""))}
               pattern={REGEXP_ONLY_DIGITS}
               validationErrors={challengeEntryError ? [challengeEntryError] : []}
@@ -346,23 +329,11 @@ export function LoginPage() {
           <div className={styles.contactSection}>
             <h3>
               {text({
-                th: "กรณีนิสิตลืมรหัสผ่าน CUNET สำหรับการเข้าสู่ระบบ ติดต่อที่สำนักบริหารเทคโนโลยีสารสนเทศ",
-                en: "For a forgotten CUNET sign-in password, contact the Office of Information Technology Administration.",
-                zh: "如忘记 CUNET 登录密码，请联系信息技术管理办公室。",
+                th: "หากลืมรหัสผ่าน กรุณาติดต่อผู้ดูแลระบบ",
+                en: "If you forget your password, contact the system administrator.",
+                zh: "如忘记密码，请联系系统管理员。",
               })}
             </h3>
-            <address>
-              {text({
-                th: "อาคารจามจุรี 3 ชั้น 4.",
-                en: "Chamchuri 3 Building, 4th floor.",
-                zh: "Chamchuri 3 大楼 4 楼。",
-              })}
-              <br />
-              {text({ th: "โทร. ", en: "Tel. ", zh: "电话：" })}
-              <a href="tel:+6622183314">02-218-3314</a>{" "}
-              {text({ th: "อีเมล์ ", en: "Email ", zh: "电子邮件：" })}
-              <a href="mailto:help@chula.ac.th">help@chula.ac.th</a>
-            </address>
           </div>
           <div className={styles.contactSection}>
             <h3>
